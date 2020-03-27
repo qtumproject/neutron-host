@@ -1,15 +1,18 @@
 extern crate neutron_star_constants;
-use crate::hypervisor::*;
-use crate::interface::*;
+use neutron_host::hypervisor::*;
+use neutron_host::interface::*;
 use qx86::vm::*;
 use neutron_star_constants::*;
 use num_derive::FromPrimitive;    
 use num_traits::FromPrimitive;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Default)]
-pub struct TestbenchAPI{
+pub struct TestbenchAPI <'a>{
     sccs: Vec<Vec<u8>>,
-    pub context: NeutronContext
+	pub context: NeutronContext,
+	pub chain: SimulatedBlockchain<'a>,
+	pub state_db: HashMap<&'a [u8], &'a Vec<u8>>,
 }
 
 impl NeutronAPI for TestbenchAPI{
@@ -45,7 +48,25 @@ impl NeutronAPI for TestbenchAPI{
     }
     fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>{
         Ok(self.sccs.len())
-    }
+	}
+	
+	fn load_state(&mut self, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
+
+	}
+
+	fn store_state(&mut self, key: &[u8], data: &[u8]) -> Result<(), NeutronError> {
+		self.state_db.insert(key, data);
+		Ok(())
+	}
+
+	fn load_protected_state(&mut self, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
+
+	}
+
+	fn store_protected_state(&mut self, key: &[u8], data: &[u8]) -> Result<(), NeutronError> {
+		self.state_db.insert(key, data);
+		Ok(())
+	}
 
     fn log_error(&mut self, msg: &str){
         println!("ERROR: {}", msg);
@@ -102,6 +123,37 @@ impl Hypervisor for TestbenchAPI{
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct SimulatedBlockchain <'a> {
+	pub blocks: Vec<Block>,
+	pub contracts: HashMap<String, &'a Contract<'a>>,
+}
+
+#[derive(Clone, Debug)]
+struct Contract<'a> {
+	pub data_section: &'a[String],
+	pub code_section: &'a[String],
+	pub section_info: [u8; 2],
+	pub vm_opts: VMOptions,
+}
+
+#[derive(Clone, Debug)]
+struct VMOptions {
+
+}
+
+//type OutputSize = U32
+
+#[derive(Clone, Debug)]
+struct Block {
+	pub hash_prev_block: String, // for now this is easy for display
+	pub hash_merkle_root: String,
+	pub hash_state_root: String,
+    pub hash_utxo_root: String,
+    pub time: u32,
+    pub bits: u32,
+    pub nonce: u32,
+}
 
 
 #[cfg(test)]

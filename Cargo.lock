@@ -117,8 +117,13 @@ dependencies = [
 name = "neutron-testbench"
 version = "0.1.0"
 dependencies = [
+ "elf 0.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "neutron-host 0.1.0",
  "neutron-star-constants 0.1.0 (git+https://github.com/qtumproject/neutronstar-constants)",
+ "num 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num-derive 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num-traits 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "qx86 0.1.0 (git+https://github.com/qtumproject/qx86-rs)",
 ]
 
 [[package]]
