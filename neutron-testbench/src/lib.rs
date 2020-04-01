@@ -6,13 +6,20 @@ use neutron_star_constants::*;
 use num_derive::FromPrimitive;    
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
+use std::collections::HashSet;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone)]
+enum State <'a>{
+	Unprotected(HashMap<&'a[u8], &'a[u8]>),
+	Protected(HashSet<&'a[u8], &'a[u8] >)
+}
+
+#[derive(Clone, Default)]
 pub struct TestbenchAPI <'a>{
     sccs: Vec<Vec<u8>>,
 	pub context: NeutronContext,
 	pub chain: SimulatedBlockchain<'a>,
-	pub state_db: HashMap<&'a [u8], &'a Vec<u8>>,
+	pub state: HashMap<NeutronAddress, &'a State<'a>>,
 }
 
 impl NeutronAPI for TestbenchAPI{
@@ -50,21 +57,21 @@ impl NeutronAPI for TestbenchAPI{
         Ok(self.sccs.len())
 	}
 	
-	fn load_state(&mut self, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
+	fn load_state(&mut self, address: String, key: String, data: &mut String) -> Result<usize, NeutronError> {
 
 	}
 
-	fn store_state(&mut self, key: &[u8], data: &[u8]) -> Result<(), NeutronError> {
-		self.state_db.insert(key, data);
+	fn store_state(&mut self, address: String, key: String, data: &mut String) -> Result<(), NeutronError> {
+		self.state.insert(key, data);
 		Ok(())
 	}
 
-	fn load_protected_state(&mut self, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
+	fn load_protected_state(&mut self, address: String, key: String, data: &mut String) -> Result<usize, NeutronError> {
 
 	}
 
-	fn store_protected_state(&mut self, key: &[u8], data: &[u8]) -> Result<(), NeutronError> {
-		self.state_db.insert(key, data);
+	fn store_protected_state(&mut self, address: String, key: String, data: &mut String) -> Result<(), NeutronError> {
+		self.state.insert(key, data);
 		Ok(())
 	}
 

@@ -5,8 +5,9 @@ extern crate struct_deser;
 use struct_deser_derive::*;
 use neutron_star_constants::*;
 use ring::digest::{Context, SHA256};
+use rand::Rng;
 
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Clone, Debug, Eq, PartialEq, Default, Hash)]
 /// NeutronAddress is a full dynamic length address. 
 /// Due to it being dynamic length it is inconvenient to use, but is required for sending coins to an address
 pub struct NeutronAddress{
@@ -30,7 +31,11 @@ impl NeutronAddress{
             version: self.version,
             data: data
         }
-    }
+	}
+	
+	pub fn generate_random_address(&mut self) {
+		self.data = rand::thread_rng().gen::<[u8; 32]>().to_vec();
+	}
 }
 
 
@@ -192,15 +197,15 @@ pub trait NeutronAPI{
     fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>;
 	
 	/// Loads user accessible state from the smart contract database
-    fn load_state(&mut self, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError>;
+    fn load_state(&mut self, address: String, key: String, data: &mut String) -> Result<usize, NeutronError>;
     /// Writes user accessible state to the smart contract database
-    fn store_state(&mut self, key: &[u8], data: &[u8]) -> Result<(), NeutronError>;
+    fn store_state(&mut self, address: String, key: String, data: &mut String) -> Result<(), NeutronError>;
     /// Loads "protected" state from the smart contract database. Protected state can include bytecode, VM configuration options, etc. 
     /// Protected state should not be freely exposed to smart contracts 
-    fn load_protected_state(&mut self, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError>;
+    fn load_protected_state(&mut self, address: String, key: String, data: &mut String) -> Result<usize, NeutronError>;
     /// Writes "protected" state to the smart contract database. Protected state can include bytecode, VM configuration options, etc. 
     /// Protected state should not be freely exposed to smart contracts 
-    fn store_protected_state(&mut self, key: &[u8], data: &[u8]) -> Result<(), NeutronError>;
+    fn store_protected_state(&mut self, address: String, key: String, data: &mut String) -> Result<(), NeutronError>;
     /// Loads user accessible state from another smart contract's "namespace" in the smart contract database.  
     fn load_external_state(&mut self, address: &NeutronShortAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError>;
     /// Loads "protected" state from the smart contract database which is from another smart contract's namespace. 
