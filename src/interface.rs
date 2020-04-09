@@ -197,15 +197,15 @@ pub trait NeutronAPI{
     fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>;
 	
 	/// Loads user accessible state from the smart contract database
-    fn load_state(&mut self, address: String, key: String, data: &mut String) -> Result<usize, NeutronError>;
+    fn load_state(&mut self, address: NeutronAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError>;
     /// Writes user accessible state to the smart contract database
-    fn store_state(&mut self, address: String, key: String, data: &mut String) -> Result<(), NeutronError>;
+    fn store_state(&mut self, address: NeutronAddress, key: &[u8], data: &[u8]) -> Result<(), NeutronError>;
     /// Loads "protected" state from the smart contract database. Protected state can include bytecode, VM configuration options, etc. 
     /// Protected state should not be freely exposed to smart contracts 
-    fn load_protected_state(&mut self, address: String, key: String, data: &mut String) -> Result<usize, NeutronError>;
+    fn load_protected_state(&mut self, address: NeutronAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError>;
     /// Writes "protected" state to the smart contract database. Protected state can include bytecode, VM configuration options, etc. 
     /// Protected state should not be freely exposed to smart contracts 
-    fn store_protected_state(&mut self, address: String, key: String, data: &mut String) -> Result<(), NeutronError>;
+    fn store_protected_state(&mut self, address: NeutronAddress, key: &[u8], data: &[u8]) -> Result<(), NeutronError>;
     /// Loads user accessible state from another smart contract's "namespace" in the smart contract database.  
     fn load_external_state(&mut self, address: &NeutronShortAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError>;
     /// Loads "protected" state from the smart contract database which is from another smart contract's namespace. 
@@ -246,7 +246,6 @@ pub trait NeutronAPI{
     /// Logs a debug message. Only for diagnostic purposes, does not have any consensus effect and may effectively be a no-op
     fn log_debug(&mut self, msg: &str);
 }
-
 
 
 #[cfg(test)]

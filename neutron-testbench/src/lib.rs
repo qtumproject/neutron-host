@@ -1,25 +1,20 @@
 extern crate neutron_star_constants;
 use neutron_host::hypervisor::*;
 use neutron_host::interface::*;
+use neutron_host::db::*;
 use qx86::vm::*;
-use neutron_star_constants::*;
-use num_derive::FromPrimitive;    
+use neutron_star_constants::*;  
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
-use std::collections::HashSet;
 
-#[derive(Clone)]
-enum State <'a>{
-	Unprotected(HashMap<&'a[u8], &'a[u8]>),
-	Protected(HashSet<&'a[u8], &'a[u8] >)
-}
+
 
 #[derive(Clone, Default)]
 pub struct TestbenchAPI <'a>{
     sccs: Vec<Vec<u8>>,
 	pub context: NeutronContext,
 	pub chain: SimulatedBlockchain<'a>,
-	pub state: HashMap<NeutronAddress, &'a State<'a>>,
+	pub db: ProtoDB,
 }
 
 impl NeutronAPI for TestbenchAPI{
@@ -57,21 +52,23 @@ impl NeutronAPI for TestbenchAPI{
         Ok(self.sccs.len())
 	}
 	
-	fn load_state(&mut self, address: String, key: String, data: &mut String) -> Result<usize, NeutronError> {
-
+	fn load_state(&mut self, address: NeutronAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
+		// if key does not exist, throw an error
+		Ok(0)
 	}
 
-	fn store_state(&mut self, address: String, key: String, data: &mut String) -> Result<(), NeutronError> {
-		self.state.insert(key, data);
+	fn store_state(&mut self, address: NeutronAddress, key: &[u8], data: &[u8]) -> Result<(), NeutronError> {
+		// if key || value exceeds size limits, throw an error
 		Ok(())
 	}
 
-	fn load_protected_state(&mut self, address: String, key: String, data: &mut String) -> Result<usize, NeutronError> {
-
+	fn load_protected_state(&mut self, address: NeutronAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
+		// if key does not exist, throw an error
+		Ok(0)
 	}
 
-	fn store_protected_state(&mut self, address: String, key: String, data: &mut String) -> Result<(), NeutronError> {
-		self.state.insert(key, data);
+	fn store_protected_state(&mut self, address: NeutronAddress, key: &[u8], data: &[u8]) -> Result<(), NeutronError> {
+		// if key || value exceeds size limits, throw an error
 		Ok(())
 	}
 
