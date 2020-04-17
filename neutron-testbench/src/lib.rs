@@ -6,14 +6,15 @@ use qx86::vm::*;
 use neutron_star_constants::*;  
 use num_traits::FromPrimitive;
 use std::collections::HashMap;
+use crate::blockchain::*;
 
 
 
 #[derive(Clone, Default)]
-pub struct TestbenchAPI <'a>{
+pub struct TestbenchAPI{
     sccs: Vec<Vec<u8>>,
 	pub context: NeutronContext,
-	pub chain: SimulatedBlockchain<'a>,
+	pub chain: SimulatedBlockchain,
 	pub db: ProtoDB,
 }
 
@@ -125,38 +126,6 @@ impl Hypervisor for TestbenchAPI{
 
         Ok(())
     }
-}
-
-#[derive(Clone, Debug, Default)]
-struct SimulatedBlockchain <'a> {
-	pub blocks: Vec<Block>,
-	pub contracts: HashMap<String, &'a Contract<'a>>,
-}
-
-#[derive(Clone, Debug)]
-struct Contract<'a> {
-	pub data_section: &'a[String],
-	pub code_section: &'a[String],
-	pub section_info: [u8; 2],
-	pub vm_opts: VMOptions,
-}
-
-#[derive(Clone, Debug)]
-struct VMOptions {
-
-}
-
-//type OutputSize = U32
-
-#[derive(Clone, Debug)]
-struct Block {
-	pub hash_prev_block: String, // for now this is easy for display
-	pub hash_merkle_root: String,
-	pub hash_state_root: String,
-    pub hash_utxo_root: String,
-    pub time: u32,
-    pub bits: u32,
-    pub nonce: u32,
 }
 
 

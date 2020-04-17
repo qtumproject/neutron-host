@@ -1,12 +1,12 @@
 extern crate elf;
 extern crate qx86;
-extern crate testbench_lib;
 
 use std::env;
 use std::path::PathBuf;
 use neutron_host::hypervisor::*;
 use neutron_host::interface::*;
 use qx86::vm::*;
+use crate::*;
 
 const MAX_GAS:u64 = 10000000;
 

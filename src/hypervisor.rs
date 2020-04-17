@@ -4,6 +4,8 @@ use qx86::vm::*;
 use crate::*;
 use neutron_star_constants::*;
 use interface::*;
+use addressing::*;
+use db::*;
 
 
 impl Hypervisor for dyn NeutronHypervisor{
@@ -80,12 +82,25 @@ pub trait NeutronHypervisor : NeutronAPI{
 
         self.pop_sccs_toss()?; //throw away extra data
 
-        //todo: persist code and data...
-        
         Ok(())
     }
     fn call_contract_from_sccs(&mut self, _vm: &mut VM){
 
     }
+}
+
+pub fn initialize_vm(hypervisor: &mut dyn NeutronHypervisor) -> Result<(), VMError> {
+    let vm = &mut VM::default();
+    hypervisor.init_cpu(vm);
+    //todo: deterministic creation of address 
+    let address = NeutronAddress{version: 1, data: vec![]};
+	address.generate_random_address();
+	let contract_address = address.to_short_address();
+    hypervisor.create_contract_from_sccs(vm);
+    //todo: persist code and data...
+	let execution = vm.execute(hypervisor);
+		
+
+    Ok(())
 }
 
