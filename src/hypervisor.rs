@@ -7,25 +7,10 @@ use interface::*;
 use addressing::*;
 use db::*;
 
+pub trait NeutronHypervisor : NeutronAPI + Hypervisor {
+    fn as_hypervisor(&self) -> &mut dyn Hypervisor;
+    fn as_api(&self) -> &dyn NeutronAPI;
 
-impl Hypervisor for dyn NeutronHypervisor{
-    fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
-        if num == EXIT_INTERRUPT{
-            self.log_debug("Exit interrupt triggered");
-            return Err(VMError::InternalVMStop);
-        }
-        if num != NEUTRON_INTERRUPT{
-            self.log_error("Invalid interrupt triggered");
-            return Ok(());
-        }
-        let ctx = self.get_context();
-        vm.set_reg32(Reg32::EAX, ctx.exec.nest_level);
-        println!("Interrupt occurred! {}", num);
-        Ok(())
-    }
-}
-
-pub trait NeutronHypervisor : NeutronAPI{
     fn init_cpu(&mut self, vm: &mut VM) -> Result<(), VMError>{
         self.init_memory(vm)?;
         vm.gas_remaining = self.get_context().exec.gas_limit;
@@ -89,6 +74,37 @@ pub trait NeutronHypervisor : NeutronAPI{
     }
 }
 
+pub struct MachineHypervisor {
+    pub context: NeutronContext,
+}
+
+impl MachineHypervisor {
+    fn as_hypervisor(&self) -> &dyn Hypervisor {
+        self
+    }
+    fn as_api(&self) -> &dyn NeutronAPI {
+        self
+    }
+}
+
+impl Hypervisor for MachineHypervisor {
+    fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
+        if num == EXIT_INTERRUPT{
+            //self.log_debug("Exit interrupt triggered");
+            return Err(VMError::InternalVMStop);
+        }
+        if num != NEUTRON_INTERRUPT{
+            //self.log_error("Invalid interrupt triggered");
+            return Ok(());
+        }
+        //let ctx = self.get_context();
+        //vm.set_reg32(Reg32::EAX, ctx.exec.nest_level);
+        println!("Interrupt occurred! {}", num);
+        Ok(())
+    }
+}
+
+
 pub fn initialize_vm(hypervisor: &mut dyn NeutronHypervisor) -> Result<(), VMError> {
     let vm = &mut VM::default();
     hypervisor.init_cpu(vm);
@@ -98,7 +114,7 @@ pub fn initialize_vm(hypervisor: &mut dyn NeutronHypervisor) -> Result<(), VMErr
 	let contract_address = address.to_short_address();
     hypervisor.create_contract_from_sccs(vm);
     //todo: persist code and data...
-	let execution = vm.execute(hypervisor);
+	let execution = vm.execute(hypervisor.as_hypervisor());
 		
 
     Ok(())
