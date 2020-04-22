@@ -7,13 +7,15 @@ use interface::*;
 use addressing::*;
 use db::*;
 
-pub trait NeutronHypervisor : NeutronAPI + Hypervisor {
-    fn as_hypervisor(&self) -> &mut dyn Hypervisor;
-    fn as_api(&self) -> &dyn NeutronAPI;
+pub struct NeutronHypervisor {
+    pub context: NeutronContext,
+    pub api: Box<dyn NeutronAPI>,
+}
 
+impl NeutronHypervisor {
     fn init_cpu(&mut self, vm: &mut VM) -> Result<(), VMError>{
         self.init_memory(vm)?;
-        vm.gas_remaining = self.get_context().exec.gas_limit;
+        vm.gas_remaining = self.api.get_context().exec.gas_limit;
         vm.eip = 0x10000;
         Ok(())
     }
@@ -46,26 +48,26 @@ pub trait NeutronHypervisor : NeutronAPI + Hypervisor {
 
     fn create_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
         let mut tmp = vec![];
-        self.pop_sccs(&mut tmp)?;
+        self.api.pop_sccs(&mut tmp)?;
 //        let _v = NeutronVersion::from_bytes(&tmp);
         //validate version later on..
         
         let mut tmp: Vec<u8> = vec![];
-        self.pop_sccs(&mut tmp)?;
+        self.api.pop_sccs(&mut tmp)?;
 
         let code_sections = tmp[0];
         assert!(code_sections == 1);
         let mut code: Vec<u8> = vec![];
-        self.pop_sccs(&mut code)?;
+        self.api.pop_sccs(&mut code)?;
         vm.copy_into_memory(0x10000, &code).unwrap();
 
         let data_sections = tmp[0];
         assert!(data_sections == 1);
         let mut data: Vec<u8> = vec![];
-        self.pop_sccs(&mut data)?;
+        self.api.pop_sccs(&mut data)?;
         vm.copy_into_memory(0x80020000, &data).unwrap();
 
-        self.pop_sccs_toss()?; //throw away extra data
+        self.api.pop_sccs_toss()?; //throw away extra data
 
         Ok(())
     }
@@ -74,47 +76,35 @@ pub trait NeutronHypervisor : NeutronAPI + Hypervisor {
     }
 }
 
-pub struct MachineHypervisor {
-    pub context: NeutronContext,
-}
-
-impl MachineHypervisor {
-    fn as_hypervisor(&self) -> &dyn Hypervisor {
-        self
-    }
-    fn as_api(&self) -> &dyn NeutronAPI {
-        self
-    }
-}
-
-impl Hypervisor for MachineHypervisor {
+impl Hypervisor for NeutronHypervisor {
     fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
         if num == EXIT_INTERRUPT{
-            //self.log_debug("Exit interrupt triggered");
+            self.api.log_debug("Exit interrupt triggered");
             return Err(VMError::InternalVMStop);
         }
         if num != NEUTRON_INTERRUPT{
-            //self.log_error("Invalid interrupt triggered");
+            self.api.log_error("Invalid interrupt triggered");
             return Ok(());
         }
-        //let ctx = self.get_context();
-        //vm.set_reg32(Reg32::EAX, ctx.exec.nest_level);
+        let ctx = &self.context;
+        vm.set_reg32(Reg32::EAX, ctx.exec.nest_level);
         println!("Interrupt occurred! {}", num);
         Ok(())
     }
 }
 
 
-pub fn initialize_vm(hypervisor: &mut dyn NeutronHypervisor) -> Result<(), VMError> {
+pub fn initialize_vm(hypervisor: &mut NeutronHypervisor) -> Result<(), VMError> {
     let vm = &mut VM::default();
     hypervisor.init_cpu(vm);
     //todo: deterministic creation of address 
-    let address = NeutronAddress{version: 1, data: vec![]};
+    let mut address = NeutronAddress{version: 1, data: vec![]};
 	address.generate_random_address();
 	let contract_address = address.to_short_address();
     hypervisor.create_contract_from_sccs(vm);
     //todo: persist code and data...
-	let execution = vm.execute(hypervisor.as_hypervisor());
+    let underlying_hypervisor: Box<&mut dyn Hypervisor> = Box::new(hypervisor);
+	let execution = vm.execute(*underlying_hypervisor);
 		
 
     Ok(())
