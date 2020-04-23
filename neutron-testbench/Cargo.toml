@@ -4,13 +4,9 @@ version = "0.1.0"
 authors = ["VoR0220 <catalanor0220@gmail.com>"]
 edition = "2018"
 
-[lib]
-name = "testbench_lib"
-path = "src/lib.rs"
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-neutron-star-constants = { git = "https://github.com/qtumproject/neutronstar-constants", branch = "master"}
+#neutron-star-constants = { git = "https://github.com/qtumproject/neutronstar-constants", branch = "master"}
+neutron-star-constants = { path = "../../neutron-star-constants"}
 qx86 = { git = "https://github.com/qtumproject/qx86-rs", branch = "master"}
 neutron-host = { path = "../"}
 elf = "0.0.10"

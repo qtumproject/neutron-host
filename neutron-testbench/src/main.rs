@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use neutron_host::hypervisor::*;
 use neutron_host::interface::*;
 use qx86::vm::*;
-use crate::*;
+use neutron_testbench::test_interface::*;
 
 const MAX_GAS:u64 = 10000000;
 
@@ -25,9 +25,10 @@ fn main() {
     setup_api(&mut api, &text_scn.data, &data_scn.data);
     let mut vm:VM = VM::default();
     vm.charger = GasCharger::test_schedule();
-    api.init_cpu(&mut vm).unwrap();
-    api.create_contract_from_sccs(&mut vm).unwrap();
-    let x = vm.execute(&mut api);
+    let mut hypervisor = NeutronHypervisor{context: api.get_context(), api: Box::new(api.clone())};
+    hypervisor.init_cpu(&mut vm).unwrap();
+    hypervisor.create_contract_from_sccs(&mut vm).unwrap();
+    let x = vm.execute(&mut hypervisor);
     vm.print_diagnostics();
     println!("Used gas: {}", MAX_GAS - vm.gas_remaining);
     x.unwrap();

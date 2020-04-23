@@ -7,13 +7,13 @@ use interface::*;
 use addressing::*;
 use db::*;
 
-pub struct NeutronHypervisor {
-    pub context: NeutronContext,
+pub struct NeutronHypervisor<'a> {
+    pub context: &'a NeutronContext,
     pub api: Box<dyn NeutronAPI>,
 }
 
-impl NeutronHypervisor {
-    fn init_cpu(&mut self, vm: &mut VM) -> Result<(), VMError>{
+impl <'a> NeutronHypervisor<'a> {
+    pub fn init_cpu(&mut self, vm: &mut VM) -> Result<(), VMError>{
         self.init_memory(vm)?;
         vm.gas_remaining = self.api.get_context().exec.gas_limit;
         vm.eip = 0x10000;
@@ -46,7 +46,7 @@ impl NeutronHypervisor {
         Ok(())
     }
 
-    fn create_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
+    pub fn create_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
         let mut tmp = vec![];
         self.api.pop_sccs(&mut tmp)?;
 //        let _v = NeutronVersion::from_bytes(&tmp);
@@ -71,12 +71,16 @@ impl NeutronHypervisor {
 
         Ok(())
     }
+
+    fn deploy_contract() {
+        
+    }
     fn call_contract_from_sccs(&mut self, _vm: &mut VM){
 
     }
 }
 
-impl Hypervisor for NeutronHypervisor {
+impl <'a> Hypervisor for NeutronHypervisor<'a> {
     fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
         if num == EXIT_INTERRUPT{
             self.api.log_debug("Exit interrupt triggered");
