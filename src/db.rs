@@ -27,7 +27,7 @@ pub trait NeutronDB{
     //fn compute_state_differences(&mut self, reads: HashMap<NeutronShortAddress, HashMap<Vec<u8>, Vec<u8>>>, writes: HashMap<NeutronShortAddress, HashMap<Vec<u8>, Vec<u8>>>)
     //    -> Result<(), NeutronDBError>;
 }
-#[derive(Default, Clone)]
+#[derive(Default,  Debug, Clone)]
 pub struct ProtoDB{
     storage: HashMap<NeutronShortAddress, HashMap<Vec<u8>, Vec<u8>>>,
     /// This only tracks keys which are read from storage, and ignores checkpoint-only data and reverts

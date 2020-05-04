@@ -4,13 +4,13 @@ use neutron_host::interface::*;
 use neutron_host::db::*;
 use neutron_host::addressing::*;
 use qx86::vm::*;
+use qx86::structs::ValueSize;
 use neutron_star_constants::*;  
 use num_traits::FromPrimitive;
 use crate::blockchain::SimulatedBlockchain;
+use std::cmp::max;
 
-
-
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct TestbenchAPI{
     sccs: Vec<Vec<u8>>,
 	pub context: NeutronContext,
@@ -18,21 +18,28 @@ pub struct TestbenchAPI{
 	pub db: ProtoDB,
 }
 
-impl NeutronAPI for TestbenchAPI{
+impl CallSystem for TestbenchAPI{
     fn get_context(&self) -> &NeutronContext{
         &self.context
     }
-    fn push_sccs(&mut self, data: &Vec<u8>) -> Result<(), NeutronError>{
-        self.sccs.push(data.clone());
+    fn push_sccs(&mut self, vm: &mut VM, data: &Vec<u8>) -> Result<(), NeutronError>{
+        let address = vm.get_reg(Reg32::ECX as u8, ValueSize::Dword).u32_exact()?;
+        let size = vm.get_reg(Reg32::EDX as u8, ValueSize::Dword).u32_exact()?;
+        let data = vm.copy_from_memory(address, size).unwrap();
+        self.sccs.push(data.to_vec());
+        vm.gas_remaining; //+= data.len() * memory_copy_cost + sccs_push_cost;
         Ok(())
     }
-    fn pop_sccs(&mut self, data: &mut Vec<u8>) -> Result<(), NeutronError>{
-        let p = self.sccs.pop().ok_or(NeutronError::RecoverableFailure)?;
-        data.resize(p.len(), 0);
-        data.copy_from_slice(&p);
+    fn pop_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
+        //let p = self.sccs.pop().ok_or(NeutronError::RecoverableFailure)?;
+        let address = vm.get_reg(Reg32::EAX as u8, ValueSize::Dword).u32_exact()?;
+        let max_size = vm.get_reg(Reg32::EDX as u8, ValueSize::Dword);
+        let data = self.sccs.pop().unwrap(); //returns slice
+        vm.copy_into_memory(address, &data);
+        vm.gas_remaining; //+= max(max_size, data.len()); /* * sccs_copy_cost )*/
         Ok(())
     }
-    fn pop_sccs_toss(&mut self) -> Result<(), NeutronError>{
+    fn pop_sccs_toss(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
         if self.sccs.len() == 0{
             Err(NeutronError::RecoverableFailure)
         }else{
@@ -40,104 +47,63 @@ impl NeutronAPI for TestbenchAPI{
             Ok(())
         }
     }
-    fn peek_sccs(&mut self, data: &mut Vec<u8>) -> Result<(), NeutronError>{
+    fn peek_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
+        let address = vm.get_reg(Reg32::EAX as u8, ValueSize::Dword).u32_exact()?;
+        let max_size = vm.get_reg(Reg32::ECX as u8, ValueSize::Dword).u32_exact()?;
+        let index = vm.get_reg(Reg32::EDX as u8, ValueSize::Dword).u32_exact()? as usize;
         if self.sccs.len() == 0{
             Err(NeutronError::RecoverableFailure)
-        }else{
-            let p = &self.sccs[self.sccs.len() - 1];
-            data.copy_from_slice(p);
+        } else if index + 1 > self.sccs.len() {
+            Err(NeutronError::UnrecoverableFailure)
+        } else {
+            let data = &self.sccs[self.sccs.len() - (index + 1)];
+            vm.copy_into_memory(address, data);
+            vm.gas_remaining; // if eax == 0 then 0 else mem_copy_cost * data.len()
             Ok(())
         }
     }
-    fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>{
+    fn sccs_swap(&mut self, vm: &mut VM) -> Result<(), NeutronError> {
+        let index = vm.get_reg(Reg32::EAX as u8, ValueSize::Dword).u32_exact()? as usize;
+        if index < 1 {
+            Err(NeutronError::UnrecoverableFailure)
+        } else {
+            let to_switch_index = self.sccs.len() - (index + 1);
+            let to_switch_val = self.sccs[to_switch_index];
+            let top_val = self.sccs[self.sccs.len() - 1];
+            self.sccs[to_switch_index] = top_val;
+            self.sccs[self.sccs.len() - 1] = to_switch_val;
+            vm.gas_remaining; // -= mem_copy_cost * (top_val.len() + to_switch_val.len())
+            Ok(())
+        }
+    }
+    fn sccs_dup(&mut self, vm: &mut VM) -> Result<(), NeutronError> {
+        let index = vm.get_reg(Reg32::EAX as u8, ValueSize::Dword).u32_exact()? as usize;
+        if index < 1 {
+            Err(NeutronError::UnrecoverableFailure)
+        } else {
+            let to_dup_val = self.sccs[self.sccs.len() - (index + 1)];
+            self.sccs.push(to_dup_val);
+            vm.gas_remaining; // -= sccs_push_cost;
+            Ok(())
+        }
+    }
+
+    fn sccs_item_count(self, vm: &mut VM) -> Result<(), NeutronError> {
+        let num = self.sccs.len();
+        vm.set_reg32(Reg32::EAX, num as u32);
+        Ok(())
+    }
+    /*fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>{
         Ok(self.sccs.len())
-	}
-	
-	fn load_state(&mut self, address: NeutronAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
-		// if key does not exist, throw an error
-		Ok(0)
-	}
-
-	fn store_state(&mut self, address: NeutronAddress, key: &[u8], data: &[u8]) -> Result<(), NeutronError> {
-		// if key || value exceeds size limits, throw an error
-		Ok(())
-	}
-
-	fn load_protected_state(&mut self, address: NeutronAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
-		// if key does not exist, throw an error
-		Ok(0)
-	}
-
-	fn store_protected_state(&mut self, address: NeutronAddress, key: &[u8], data: &[u8]) -> Result<(), NeutronError> {
-		// if key || value exceeds size limits, throw an error
-		Ok(())
-	}
-
-	fn load_external_state(&mut self, address: &NeutronShortAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
-		Ok(0)
-	}
-
-	fn load_external_protected_state(&mut self, address: &NeutronShortAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError> {
-		Ok(0)
-	}
-
-    /// Transfers coins from the currently executing smart contract to the specified address
-    fn transfer(&mut self, address: &NeutronAddress, value: u64) -> Result<(), NeutronError> {
-		Ok(())
-	}
-    /// Transfers coins from the currently executing smart contract to the specified address
-    /// This can only be used for valid short addresses where the amount of data in a full address exactly matches the size of a short address
-    fn transfer_short(&mut self, address: &NeutronShortAddress, value: u64) -> Result<(), NeutronError> {
-		Ok(())
-	}
-    /// Returns the balance of the currently executing smart contract
-    fn balance(&mut self) -> Result<u64, NeutronError> {
-		Ok(0)
-	}
-    /// Checks the balance of an external smart contract. This can not be used for checking the balance of non-contract addresses.
-    fn balance_of_external(&mut self, address: &NeutronShortAddress) -> Result<u64, NeutronError> {
-		Ok(0)
-	}
-
-    /// Gets the block hash of the specified block
-    fn get_block_hash(&mut self, number: u64, hash: &mut[u8]) -> Result<(), NeutronError> {
-		Ok(())
-	}
-
-    /// Calculates the difference in gas cost produced by changing the amount of allocated memory.
-    /// Note this does not actually allocate any memory, this is left to the specific VM and hypervisor.
-    /// This is only for charging an appropriate gas cost to the smart contract for allocating/freeing memory.
-    fn calculate_memory_cost(&self, existing_size: u64, new_size: u64) -> Result<i64, NeutronError> {
-		Ok(0)
-	}
-    /// Calculates the difference in gas cost produced by changing the amount of allocated read-only memory.
-    /// Note this does not actually allocate any memory nor charge the smart contract for the gas, this is left to the specific VM and hypervisor.
-    /// This is only for charging an appropriate gas cost to the smart contract for allocating/freeing memory.
-    fn calculate_readonly_memory_cost(&self, existing_size: u64, new_size: u64) -> Result<i64, NeutronError> {
-		Ok(0)
-	}
-
-	fn add_gas_cost(&mut self, gas_difference: i64) -> Result<u64, NeutronError>{
-		Ok(0)
-	}
-
-    fn log_error(&mut self, msg: &str){
-        println!("ERROR: {}", msg);
-    }
-    fn log_info(&mut self, msg: &str){
-        println!("INFO: {}", msg);
-    }
-    fn log_debug(&mut self, msg: &str){
-        println!("DEBUG: {}", msg);
-    }
+	}*/
 }
 
-pub struct TestHypervisor {
+/*pub struct TestHypervisor {
     pub api: Box<TestbenchAPI>
-}
+}*/
 
 
-impl Hypervisor for TestHypervisor{
+/*impl Hypervisor for TestHypervisor{
     fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
         use TestbenchSyscalls::*;
         if num == NEUTRON_INTERRUPT || num == EXIT_INTERRUPT{
@@ -145,7 +111,7 @@ impl Hypervisor for TestHypervisor{
         }
 
         if num != TESTBENCH_INTERRUPT{
-            self.api.log_error("Invalid interrupt triggered");
+            //self.api.log_error("Invalid interrupt triggered");
             return Ok(());
         }
         let syscall:TestbenchSyscalls =  FromPrimitive::from_u32(vm.reg32(Reg32::EAX)).unwrap_or(TestbenchSyscalls::Invalid);
@@ -154,22 +120,22 @@ impl Hypervisor for TestHypervisor{
                 //(char *msg, uint32 msg_size) -> void
                 let size = vm.reg32(Reg32::ECX);
                 let msg = String::from_utf8_lossy(vm.copy_from_memory(vm.reg32(Reg32::EBX), size)?).to_owned();
-                self.api.log_error(&msg);
+                //self.api.log_error(&msg);
             },
             LogInfo => {
                 //(char *msg, uint32 msg_size) -> void
                 let size = vm.reg32(Reg32::ECX);
                 let msg = String::from_utf8_lossy(vm.copy_from_memory(vm.reg32(Reg32::EBX), size)?).to_owned();
-                self.api.log_info(&msg);;
+                //self.api.log_info(&msg);;
             },
             LogDebug => {
                 //(char *msg, uint32 msg_size) -> void
                 let size = vm.reg32(Reg32::ECX);
                 let msg = String::from_utf8_lossy(vm.copy_from_memory(vm.reg32(Reg32::EBX), size)?).to_owned();
-                self.api.log_debug(&msg);
+                //self.api.log_debug(&msg);
             },
             Invalid => {
-                self.api.log_error("Invalid testbench system call");
+                //self.api.log_error("Invalid testbench system call");
             }
             _ => unimplemented!()
         }
@@ -177,7 +143,7 @@ impl Hypervisor for TestHypervisor{
         Ok(())
     }
 }
-
+*/
 
 #[cfg(test)]
 mod tests {

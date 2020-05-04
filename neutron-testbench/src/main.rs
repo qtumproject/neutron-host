@@ -25,7 +25,7 @@ fn main() {
     setup_api(&mut api, &text_scn.data, &data_scn.data);
     let mut vm:VM = VM::default();
     vm.charger = GasCharger::test_schedule();
-    let mut hypervisor = NeutronHypervisor{context: api.get_context(), api: Box::new(api.clone())};
+    let mut hypervisor = NeutronHypervisor{context: api.get_context(), api: Box::new(api.clone)};
     hypervisor.init_cpu(&mut vm).unwrap();
     hypervisor.create_contract_from_sccs(&mut vm).unwrap();
     let x = vm.execute(&mut hypervisor);

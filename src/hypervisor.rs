@@ -1,21 +1,23 @@
 extern crate qx86;
 extern crate neutron_star_constants;
 use qx86::vm::*;
+use qx86::structs::SizedValue;
 use crate::*;
 use neutron_star_constants::*;
 use interface::*;
 use addressing::*;
-use db::*;
 
 pub struct NeutronHypervisor<'a> {
     pub context: &'a NeutronContext,
-    pub api: Box<dyn NeutronAPI>,
+    pub vm: &'a mut VM,
+    pub call_system: &'a dyn CallSystem
+    //pub api: Box<dyn NeutronAPI>,
 }
 
 impl <'a> NeutronHypervisor<'a> {
     pub fn init_cpu(&mut self, vm: &mut VM) -> Result<(), VMError>{
         self.init_memory(vm)?;
-        vm.gas_remaining = self.api.get_context().exec.gas_limit;
+        vm.gas_remaining = self.context.exec.gas_limit;
         vm.eip = 0x10000;
         Ok(())
     }
@@ -46,19 +48,17 @@ impl <'a> NeutronHypervisor<'a> {
         Ok(())
     }
 
-    pub fn create_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
+    /*pub fn create_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
         let mut tmp = vec![];
-        self.api.pop_sccs(&mut tmp)?;
+        self.call_system.pop_sccs()?;
 //        let _v = NeutronVersion::from_bytes(&tmp);
         //validate version later on..
-        
-        let mut tmp: Vec<u8> = vec![];
-        self.api.pop_sccs(&mut tmp)?;
+        self.call_system.pop_sccs()?;
 
         let code_sections = tmp[0];
         assert!(code_sections == 1);
         let mut code: Vec<u8> = vec![];
-        self.api.pop_sccs(&mut code)?;
+        self.pop_sccs()?;
         vm.copy_into_memory(0x10000, &code).unwrap();
 
         let data_sections = tmp[0];
@@ -70,11 +70,8 @@ impl <'a> NeutronHypervisor<'a> {
         self.api.pop_sccs_toss()?; //throw away extra data
 
         Ok(())
-    }
+    }*/
 
-    fn deploy_contract() {
-        
-    }
     fn call_contract_from_sccs(&mut self, _vm: &mut VM){
 
     }
@@ -83,11 +80,11 @@ impl <'a> NeutronHypervisor<'a> {
 impl <'a> Hypervisor for NeutronHypervisor<'a> {
     fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
         if num == EXIT_INTERRUPT{
-            self.api.log_debug("Exit interrupt triggered");
+            //self.log_debug("Exit interrupt triggered");
             return Err(VMError::InternalVMStop);
         }
         if num != NEUTRON_INTERRUPT{
-            self.api.log_error("Invalid interrupt triggered");
+            //self.log_error("Invalid interrupt triggered");
             return Ok(());
         }
         let ctx = &self.context;
@@ -98,7 +95,7 @@ impl <'a> Hypervisor for NeutronHypervisor<'a> {
 }
 
 
-pub fn initialize_vm(hypervisor: &mut NeutronHypervisor) -> Result<(), VMError> {
+/*pub fn initialize_vm(hypervisor: &mut NeutronHypervisor) -> Result<(), VMError> {
     let vm = &mut VM::default();
     hypervisor.init_cpu(vm);
     //todo: deterministic creation of address 
@@ -107,10 +104,7 @@ pub fn initialize_vm(hypervisor: &mut NeutronHypervisor) -> Result<(), VMError> 
 	let contract_address = address.to_short_address();
     hypervisor.create_contract_from_sccs(vm);
     //todo: persist code and data...
-    let underlying_hypervisor: Box<&mut dyn Hypervisor> = Box::new(hypervisor);
-	let execution = vm.execute(*underlying_hypervisor);
-		
-
+	let execution = vm.execute(hypervisor);
     Ok(())
 }
-
+*/

@@ -5,6 +5,7 @@ extern crate struct_deser;
 use struct_deser_derive::*;
 use neutron_star_constants::*;
 use crate::addressing::*;
+use qx86::vm::*;
 
 /// The result of a smart contract execution
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -92,7 +93,9 @@ pub struct TxItem{
 	/// The owner of this UTXO (or spent UTXO)
 	pub sender: NeutronAddress,
 	/// The total value sent with this UTXO (or spent by it)
-    pub value: u64
+    pub value: u64,
+    /// The state sent with this UTXO
+    pub state: Vec<u8>
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -146,22 +149,40 @@ pub struct NeutronVersion{
 }
 
 
-/// This is the primary NeutronAPI interface. It is loosely based on the C Neutron API, but uses Rust paradigms and features
+/// This is the primary call system  interface. It is loosely based on the C Neutron API, but uses Rust paradigms and features
 /// This will require a heavier translation layer, but makes Rust usage significantly simpler
-pub trait NeutronAPI{
+pub trait CallSystem{
 	/// Retrieves the context information of the current smart contract execution
 	fn get_context(&self) -> &NeutronContext;
 	/// Pushes an item to the Smart Contract Communication Stack
-	fn push_sccs(&mut self, data: &Vec<u8>) -> Result<(), NeutronError>;
+	fn push_sccs(&mut self, vm: &mut VM, data: &Vec<u8>) -> Result<(), NeutronError>;
     /// Pops an item off of the Smart Contract Communication Stack
-	fn pop_sccs(&mut self, data: &mut Vec<u8>) -> Result<(), NeutronError>;
+	fn pop_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>;
 	/// Drops an item from the Smart Contract Communication Stack, popping it and doing nothing with the data
-	fn pop_sccs_toss(&mut self) -> Result<(), NeutronError>; //returns no data, for throwing away the item
+	fn pop_sccs_toss(&mut self, vm: &mut VM) -> Result<(), NeutronError>; //returns no data, for throwing away the item
 	/// Retrieves the top item on the Smart Contract Communication Stack without removing it
-	fn peek_sccs(&mut self, data: &mut Vec<u8>) -> Result<(), NeutronError>;
+	fn peek_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>;
 	/// Checks the size of the top item on the Smart Contract Communication Stack
-    fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>;
-	
+    //fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>;
+    /// Swaps the top item of the SCCS with the item of the desired index
+    fn sccs_swap(&mut self, vm: &mut VM) -> Result<(), NeutronError>;
+    /// Replicates the desired item of the stack onto the top of the stack
+    fn sccs_dup(&mut self, vm: &mut VM) -> Result<(), NeutronError>;
+    /// Gets number of items in the sccs
+    fn sccs_item_count(self, vm: &mut VM) -> Result<(), NeutronError>;
+}
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
+    }
+}
+ 
+    /*
+    leftovers from NeutronAPI that need to be implemented in system contracts
 	/// Loads user accessible state from the smart contract database
     fn load_state(&mut self, address: NeutronAddress, key: &[u8], data: &mut Vec<u8>) -> Result<usize, NeutronError>;
     /// Writes user accessible state to the smart contract database
@@ -211,14 +232,4 @@ pub trait NeutronAPI{
     fn log_info(&mut self, msg: &str);
     /// Logs a debug message. Only for diagnostic purposes, does not have any consensus effect and may effectively be a no-op
     fn log_debug(&mut self, msg: &str);
-}
-
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
- 
+    */
