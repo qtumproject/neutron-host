@@ -152,31 +152,50 @@ pub struct ContractCallStack{
 impl ContractCallStack{
 	/// Pushes an item to the Smart Contract Communication Stack
 	pub fn push_sccs(&mut self, data: &[u8]) -> Result<(), NeutronError>{
-        Ok(())
-    }
-    /// Pops an item off of the Smart Contract Communication Stack
-	pub fn pop_sccs_limited(&mut self, buffer: &mut [u8]) -> Result<(), NeutronError>{
+        if data.len() > 0xFFFF{
+            return Err(NeutronError::RecoverableFailure);
+        }
+        self.data_stack.push(data.to_vec());
         Ok(())
     }
     /// Pops an item off of the Smart Contract Communication Stack
 	pub fn pop_sccs(&mut self) -> Result<Vec<u8>, NeutronError>{
-        Ok(vec![])
+        match self.data_stack.pop(){
+            None => {
+                return Err(NeutronError::RecoverableFailure);
+            },
+            Some(v) => {
+                return Ok(v);
+            }
+        }
     }
     /// Pops an item off of the Smart Contract Communication Stack
 	pub fn drop_sccs(&mut self) -> Result<(), NeutronError>{
-        Ok(())
-    }
-	/// Retrieves the top item on the Smart Contract Communication Stack without removing it
-	pub fn peek_sccs_limited(&self, index: u32, data: &mut [u8]) -> Result<(), NeutronError>{
+        if self.data_stack.len() == 0{
+            return Err(NeutronError::RecoverableFailure);
+        }
+        self.data_stack.pop();
         Ok(())
     }
 	/// Retrieves the top item on the Smart Contract Communication Stack without removing it
 	pub fn peek_sccs(&self, index: u32) -> Result<Vec<u8>, NeutronError>{
-        Ok(vec![])
+        let i = (self.data_stack.len() as isize - 1) - index as isize;
+        if i < 0{
+            return Err(NeutronError::RecoverableFailure);
+        }
+        match self.data_stack.get(i as usize){
+            None => {
+                return Err(NeutronError::RecoverableFailure);
+            },
+            Some(v) => {
+                return Ok(v.to_vec());
+            }
+        }
     }
 	/// Checks the size of the top item on the Smart Contract Communication Stack
     //fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>;
     /// Swaps the top item of the SCCS with the item of the desired index
+    /* TODO later
     pub fn sccs_swap(&mut self,index: u32) -> Result<(), NeutronError>{
         Ok(())
     }
@@ -184,30 +203,52 @@ impl ContractCallStack{
     pub fn sccs_dup(&mut self, index: u32) -> Result<(), NeutronError>{
         Ok(())
     }
+    */
     /// Gets number of items in the sccs
     pub fn sccs_item_count(&self) -> Result<u32, NeutronError>{
-        Ok(0)
+        Ok(self.data_stack.len() as u32)
     }
     /// Get total memory occupied by the SCCS
+    /*
     pub fn sccs_memory_amount(&self) -> Result<u32, NeutronError>{
         Ok(0)
     }
-
+    */
     pub fn push_context(&mut self, context: ExecutionContext) -> Result<(), NeutronError>{
+        self.context_stack.push(context);
         Ok(())
     }
     pub fn pop_context(&mut self) -> Result<ExecutionContext, NeutronError>{
-        Ok(ExecutionContext::default())
+        match self.context_stack.pop(){
+            None => {
+                return Err(NeutronError::RecoverableFailure);
+            },
+            Some(v) => {
+                return Ok(v);
+            }
+        }
     }
     pub fn peek_context(&self, index: usize) -> Result<&ExecutionContext, NeutronError>{
-        Ok(self.context_stack.get(0).unwrap())
+        let i = (self.context_stack.len() as isize - 1) - index as isize;
+        if i < 0{
+            return Err(NeutronError::RecoverableFailure);
+        }
+        match self.context_stack.get(i as usize){
+            None => {
+                return Err(NeutronError::RecoverableFailure);
+            },
+            Some(v) => {
+                return Ok(v);
+            }
+        }
     }
     pub fn context_count(&self) -> Result<usize, NeutronError>{
-        Ok(0)
+        Ok(self.context_stack.len())
     }
 	/// Retrieves the context information of the current smart contract execution
 	pub fn current_context(&self) -> &ExecutionContext{
-        self.context_stack.get(0).unwrap()
+        //this should never error, so just unwrap
+        self.peek_context(0).unwrap()
     }
 }
 
@@ -220,10 +261,10 @@ pub trait CallSystem{
     fn block_height(&self) -> Result<u32, NeutronError>;
     /// Read a state key from the database using the permanent storage feature set
     /// Used for reading core contract bytecode by VMs
-    fn read_state_key(&mut self, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>;
+    fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>;
     /// Write a state key to the database using the permanent storage feature set
     /// Used for writing bytecode etc by VMs
-    fn write_state_key(&mut self, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>;
+    fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>;
 
     fn log_error(&self, msg: &str){
         println!("Error: {}", msg);
@@ -262,18 +303,18 @@ impl CallSystem for TestbenchCallSystem{
     }
     /// Read a state key from the database using the permanent storage feature set
     /// Used for reading core contract bytecode by VMs
-    fn read_state_key(&mut self, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
+    fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
         Ok(vec![])
     }
     /// Write a state key to the database using the permanent storage feature set
     /// Used for writing bytecode etc by VMs
-    fn write_state_key(&mut self, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>{
+    fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>{
         Ok(())
     }
 }
 
 impl TestbenchCallSystem{
-    fn execute_contract(&mut self, stack: &mut ContractCallStack) -> Result<u32, NeutronError>{
+    pub fn execute_contract_from_stack(&mut self, stack: &mut ContractCallStack) -> Result<u32, NeutronError>{
         let version = stack.peek_sccs(0)?; //todo, replace with peek_sccs_u32 or something
         if version[0] == 2 {
             let mut vm = X86Interface::new(self, stack);

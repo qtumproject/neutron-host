@@ -70,8 +70,8 @@ impl<'a> X86Interface<'a> {
     fn store_contract_code(&mut self) -> Result<(), NeutronError>{
         let code_key = vec![X86Interface::CODE_SECTION_SPACE, 0];
         let data_key = vec![X86Interface::DATA_SECTION_SPACE, 0];
-        self.call_system.write_state_key(X86Interface::X86_SPACE, &code_key, &self.code_sections[0])?;
-        self.call_system.write_state_key(X86Interface::X86_SPACE, &data_key, &self.data_sections[0])?;
+        self.call_system.write_state_key(self.call_stack, X86Interface::X86_SPACE, &code_key, &self.code_sections[0])?;
+        self.call_system.write_state_key(self.call_stack, X86Interface::X86_SPACE, &data_key, &self.data_sections[0])?;
         Ok(())
     }
 
