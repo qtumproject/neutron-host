@@ -16,7 +16,7 @@ pub struct X86Interface<'a>{
 }
 
 impl<'a> VMInterface for X86Interface<'a>{
-    fn execute(&mut self) -> Result<u32, NeutronError>{
+    fn execute(&mut self) -> Result<NeutronVMResult, NeutronError>{
         let ctx = self.call_stack.current_context();
         match ctx.execution_type{
             ExecutionType::BareExecution => {
@@ -29,7 +29,7 @@ impl<'a> VMInterface for X86Interface<'a>{
                 return self.deploy();
             }
         }
-        Ok(0)
+        Err(NeutronError::RecoverableFailure) //todo
     }
 }
 
@@ -47,7 +47,7 @@ impl<'a> X86Interface<'a> {
         }
     }
 
-    fn deploy(&mut self) -> Result<u32, NeutronError>{
+    fn deploy(&mut self) -> Result<NeutronVMResult, NeutronError>{
         let mut vm = VM::default();
         if self.init_cpu(&mut vm).is_err(){
             return Err(NeutronError::UnrecoverableFailure);
@@ -59,12 +59,20 @@ impl<'a> X86Interface<'a> {
         }else{
             //???
         }
-        if vm.reg32(Reg32::EAX) != 0 {
+        let return_code = vm.reg32(Reg32::EAX);
+        if return_code != 0 {
             //if contract signaled error (but didn't actually crash/fail) then exit
             return Err(NeutronError::RecoverableFailure);
         }
         self.store_contract_code()?;
-        Ok(0)
+        let r = NeutronVMResult{
+            gas_used: self.call_stack.current_context().gas_limit.saturating_sub(vm.gas_remaining),
+            should_revert: false,
+            error_code: return_code,
+            error_location: 0,
+            extra_data: 0
+        };
+        Ok(r)
     }
 
     fn store_contract_code(&mut self) -> Result<(), NeutronError>{
@@ -139,8 +147,46 @@ impl<'a> X86Interface<'a> {
     }
 }
 
-//todo, move these into neutron-star-constants
+/*
+Summary of interface:
+
+Note: returning u64 values uses the EAX:EDX "mostly but not quite" standard cdcel convention
+
+Interrupt 0x10: push_sccs (buffer, size)
+Interrupt 0x11: pop_sccs (buffer, max_size) -> actual_size: u32
+Interrupt 0x12: peek_sccs (buffer, max_size, index) -> actual_size: u32
+Interrupt 0x13: swap_sccs (index)
+Interrupt 0x14: dup_sccs()
+Interrupt 0x15: gas_remaining()
+Interrupt 0x16: exit_execution(status)
+Interrupt 0x17: revert_execution(status)
+Interrupt 0x18: execution_status()
+Interrupt 0x19: sccs_item_count() -> size
+Interrupt 0x1A: sccs_memory_size() -> size
+Interrupt 0x1B: sccs_memory_remaining() -> size
+Interrupt 0x1C: sccs_item_limit_remaining() -> size
+Interrupt 0x20: system_call() -> error
+-- Hypervisor functions
+Interrupt 0x80: alloc_memory TBD
+-- Context functions
+Interrupt 0x90: gas_used() -> u64
+Interrupt 0x91: self_address() -- result on stack as NeutronShortAddress
+Interrupt 0x92: origin() -- result on stack as NeutronShortAddress
+Interrupt 0x93: origin_long() -- result on stack as NeutronLongAddress
+Interrupt 0x94: sender() -- result on stack as NeutronShortAddress
+Interrupt 0x95: sender_long() -- result on stack as NeutronLongAddress
+Interrupt 0x96: value_sent() -> u64
+Interrupt 0x97: nest_level() -> u32
+*/
+
+const PUSH_INTERRUPT:u8 = 0x10;
+const POP_INTERRUPT:u8 = 0x11;
+const PEEK_INTERRUPT:u8 = 0x12;
+const SWAP_INTERRUPT:u8 = 0x13;
+const DUP_INTERRUPT:u8 = 0x14;
 const SYSTEM_CALL_INTERRUPT:u8 = 0x20;
+const EXIT_INTERRUPT:u8 = 0xFF;
+const REVERT_INTERRUPT:u8 = 0xFE;
 
 impl <'a> Hypervisor for X86Interface<'a> {
     
@@ -170,7 +216,7 @@ impl <'a> Hypervisor for X86Interface<'a> {
                 }
             }
         }
-        if num != NEUTRON_INTERRUPT{
+        if num != 0{
             self.call_system.log_error("Invalid interrupt triggered");
             return Ok(());
         }

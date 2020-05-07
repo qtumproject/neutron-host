@@ -1,6 +1,7 @@
 extern crate neutron_star_constants;
 extern crate ring;
 extern crate struct_deser;
+extern crate elf;
 #[macro_use]
 use struct_deser_derive::*;
 use neutron_star_constants::*;
@@ -8,6 +9,7 @@ use crate::addressing::*;
 use qx86::vm::*;
 use crate::hypervisor::*;
 use crate::db::*;
+use std::path::PathBuf;
 
 /// The result of a smart contract execution
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -59,15 +61,6 @@ pub struct ExecutionContext{
 }
 
 impl ExecutionContext{
-	/// ???
-    pub fn to_neutron(&self) -> NeutronExecContext{
-        let mut c = NeutronExecContext::default();
-        c.flags = self.flags;
-        c.gas_limit = self.gas_limit;
-        c.nest_level = 0;
-        c.value_sent = self.value_sent;
-        c
-    }
 }
 
 /// The transaction information in which the current contract execution is located
@@ -281,12 +274,12 @@ pub trait CallSystem{
 }
 
 pub trait VMInterface{
-    fn execute(&mut self) -> Result<u32, NeutronError>;
+    fn execute(&mut self) -> Result<NeutronVMResult, NeutronError>;
 }
 
 
 //later rename to Testbench?
-struct TestbenchCallSystem{
+pub struct TestbenchCallSystem{
     pub transaction: TransactionContext,
     pub db: ProtoDB
     //etc...
@@ -294,6 +287,7 @@ struct TestbenchCallSystem{
 
 impl CallSystem for TestbenchCallSystem{
     fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>{
+        println!("system call received");
         Ok(0)
     }
     /// Get the current block height at execution
@@ -304,25 +298,70 @@ impl CallSystem for TestbenchCallSystem{
     /// Read a state key from the database using the permanent storage feature set
     /// Used for reading core contract bytecode by VMs
     fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
-        Ok(vec![])
+        let mut k = vec![space];
+        k.extend_from_slice(key);
+        match self.db.read_key(&stack.current_context().self_address.to_short_address(), &k) {
+            Err(e) => {
+                Err(NeutronError::UnrecoverableFailure)
+            },
+            Ok(v) => {
+                Ok(v)
+            }
+        }
     }
     /// Write a state key to the database using the permanent storage feature set
     /// Used for writing bytecode etc by VMs
     fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>{
-        Ok(())
+        let mut k = vec![space];
+        k.extend_from_slice(key);
+        if self.db.write_key(&stack.current_context().self_address.to_short_address(), &k, value).is_err(){
+            Err(NeutronError::UnrecoverableFailure)
+        }else{
+            Ok(())
+        }
     }
 }
 
 impl TestbenchCallSystem{
-    pub fn execute_contract_from_stack(&mut self, stack: &mut ContractCallStack) -> Result<u32, NeutronError>{
+    pub fn execute_contract_from_stack(&mut self, stack: &mut ContractCallStack) -> Result<NeutronVMResult, NeutronError>{
+        self.db.checkpoint().unwrap();
         let version = stack.peek_sccs(0)?; //todo, replace with peek_sccs_u32 or something
         if version[0] == 2 {
             let mut vm = X86Interface::new(self, stack);
-            vm.execute()?;
+            match vm.execute(){
+                Err(e) => {
+                    self.db.clear_checkpoints();
+                    return Err(e);
+                },
+                Ok(v) => {
+                    if self.db.commit().is_err(){
+                        self.db.clear_checkpoints();
+                        return Err(NeutronError::UnrecoverableFailure);
+                    }
+                    return Ok(v);
+                }
+            }
         }else{
             return Err(NeutronError::UnrecoverableFailure);
         }
-        Ok(0)
+    }
+    pub fn deploy_from_elf(&mut self, stack: &mut ContractCallStack, file: String) -> Result<NeutronVMResult, NeutronError>{
+        assert!(stack.context_count()? == 1, "Exactly one context should be pushed to the ContractCallStack");
+        let path = PathBuf::from(file);
+        let file = elf::File::open_path(&path).unwrap();
+    
+        let text_scn = file.get_section(".text").unwrap();
+        assert!(text_scn.shdr.addr == 0x10000);
+        let data_scn = file.get_section(".data").unwrap();
+        assert!(data_scn.shdr.addr == 0x80020000);
+    
+        stack.push_sccs(&data_scn.data).unwrap();
+        stack.push_sccs(&vec![1]).unwrap(); //data section count
+        stack.push_sccs(&text_scn.data).unwrap();
+        stack.push_sccs(&vec![1]).unwrap(); //code section count
+        stack.push_sccs(&vec![2, 0, 0, 0]).unwrap(); //vmversion (fill in properly later)
+
+        self.execute_contract_from_stack(stack)
     }
 }
 
