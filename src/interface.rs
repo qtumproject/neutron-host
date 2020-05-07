@@ -63,6 +63,8 @@ pub struct ExecutionContext{
 impl ExecutionContext{
 }
 
+
+
 /// The transaction information in which the current contract execution is located
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct TransactionContext{
@@ -137,6 +139,7 @@ pub struct NeutronVersion{
     pub qtum_version: u32
 }
 
+#[derive(Default)]
 pub struct ContractCallStack{
     data_stack: Vec<Vec<u8>>,
     context_stack: Vec<ExecutionContext>
@@ -279,6 +282,7 @@ pub trait VMInterface{
 
 
 //later rename to Testbench?
+#[derive(Default)]
 pub struct TestbenchCallSystem{
     pub transaction: TransactionContext,
     pub db: ProtoDB
@@ -328,6 +332,7 @@ impl TestbenchCallSystem{
         let version = stack.peek_sccs(0)?; //todo, replace with peek_sccs_u32 or something
         if version[0] == 2 {
             let mut vm = X86Interface::new(self, stack);
+            println!("Executing x86 VM");
             match vm.execute(){
                 Err(e) => {
                     self.db.clear_checkpoints();
@@ -335,6 +340,7 @@ impl TestbenchCallSystem{
                 },
                 Ok(v) => {
                     if self.db.commit().is_err(){
+                        println!("database error with commit");
                         self.db.clear_checkpoints();
                         return Err(NeutronError::UnrecoverableFailure);
                     }
@@ -356,9 +362,9 @@ impl TestbenchCallSystem{
         assert!(data_scn.shdr.addr == 0x80020000);
     
         stack.push_sccs(&data_scn.data).unwrap();
-        stack.push_sccs(&vec![1]).unwrap(); //data section count
         stack.push_sccs(&text_scn.data).unwrap();
-        stack.push_sccs(&vec![1]).unwrap(); //code section count
+        let section_info = vec![1, 1];
+        stack.push_sccs(&section_info).unwrap(); //code section count
         stack.push_sccs(&vec![2, 0, 0, 0]).unwrap(); //vmversion (fill in properly later)
 
         self.execute_contract_from_stack(stack)

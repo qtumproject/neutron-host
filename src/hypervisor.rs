@@ -49,9 +49,11 @@ impl<'a> X86Interface<'a> {
 
     fn deploy(&mut self) -> Result<NeutronVMResult, NeutronError>{
         let mut vm = VM::default();
+        println!("starting x86");
         if self.init_cpu(&mut vm).is_err(){
             return Err(NeutronError::UnrecoverableFailure);
         }
+        println!("x86 initialized");
         self.create_contract_from_sccs(&mut vm)?;
         let result = vm.execute(self);
         if result.is_err(){
@@ -59,6 +61,7 @@ impl<'a> X86Interface<'a> {
         }else{
             //???
         }
+        vm.print_diagnostics();
         let return_code = vm.reg32(Reg32::EAX);
         if return_code != 0 {
             //if contract signaled error (but didn't actually crash/fail) then exit
@@ -131,7 +134,7 @@ impl<'a> X86Interface<'a> {
         self.code_sections.push(self.call_stack.pop_sccs()?);
 
         vm.copy_into_memory(0x10000, &self.code_sections[0]).unwrap();
-
+        
         let data_sections = section_info[1];
         assert!(data_sections == 1);
         self.data_sections.push(self.call_stack.pop_sccs()?);
