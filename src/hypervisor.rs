@@ -23,7 +23,7 @@ impl<'a> VMInterface for X86Interface<'a>{
                 //..
             },
             ExecutionType::Call => {
-
+                return self.call();
             },
             ExecutionType::Deploy => {
                 return self.deploy();
@@ -78,11 +78,50 @@ impl<'a> X86Interface<'a> {
         Ok(r)
     }
 
+    fn call(&mut self) -> Result<NeutronVMResult, NeutronError>{
+        let mut vm = VM::default();
+        println!("starting x86 call");
+        if self.init_cpu(&mut vm).is_err(){
+            return Err(NeutronError::UnrecoverableFailure);
+        }
+        println!("x86 initialized");
+        self.call_contract_from_sccs(&mut vm)?;
+        let result = vm.execute(self);
+        if result.is_err(){
+            println!("VM error");
+            return Err(NeutronError::UnrecoverableFailure);
+        }else{
+            //???
+        }
+        vm.print_diagnostics();
+        let return_code = vm.reg32(Reg32::EAX);
+        if return_code != 0 {
+            //if contract signaled error (but didn't actually crash/fail) then exit
+            return Err(NeutronError::RecoverableFailure);
+        }
+        let r = NeutronVMResult{
+            gas_used: self.call_stack.current_context().gas_limit.saturating_sub(vm.gas_remaining),
+            should_revert: false,
+            error_code: return_code,
+            error_location: 0,
+            extra_data: 0
+        };
+        Ok(r)
+    }
+
     fn store_contract_code(&mut self) -> Result<(), NeutronError>{
         let code_key = vec![X86Interface::CODE_SECTION_SPACE, 0];
         let data_key = vec![X86Interface::DATA_SECTION_SPACE, 0];
         self.call_system.write_state_key(self.call_stack, X86Interface::X86_SPACE, &code_key, &self.code_sections[0])?;
         self.call_system.write_state_key(self.call_stack, X86Interface::X86_SPACE, &data_key, &self.data_sections[0])?;
+        Ok(())
+    }
+    fn load_contract_code(&mut self) -> Result<(), NeutronError>{
+        //todo need to store section counts
+        let code_key = vec![X86Interface::CODE_SECTION_SPACE, 0];
+        let data_key = vec![X86Interface::DATA_SECTION_SPACE, 0];
+        self.code_sections.push(self.call_system.read_state_key(self.call_stack, X86Interface::X86_SPACE, &code_key)?);
+        self.data_sections.push(self.call_system.read_state_key(self.call_stack, X86Interface::X86_SPACE, &data_key)?);
         Ok(())
     }
 
@@ -134,7 +173,7 @@ impl<'a> X86Interface<'a> {
         self.code_sections.push(self.call_stack.pop_sccs()?);
 
         vm.copy_into_memory(0x10000, &self.code_sections[0]).unwrap();
-        
+
         let data_sections = section_info[1];
         assert!(data_sections == 1);
         self.data_sections.push(self.call_stack.pop_sccs()?);
@@ -145,8 +184,14 @@ impl<'a> X86Interface<'a> {
         Ok(())
     }
 
-    fn call_contract_from_sccs(&mut self, _vm: &mut VM){
+    fn call_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
+        //validate version later on..
+        self.load_contract_code()?;
 
+        vm.copy_into_memory(0x10000, &self.code_sections[0]).unwrap();
+        vm.copy_into_memory(0x80020000, &self.data_sections[0]).unwrap();
+
+        Ok(())
     }
 }
 

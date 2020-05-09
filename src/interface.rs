@@ -246,6 +246,20 @@ impl ContractCallStack{
         //this should never error, so just unwrap
         self.peek_context(0).unwrap()
     }
+    pub fn create_call(&mut self, address: NeutronAddress, sender: NeutronAddress, gas_limit: u64, value: u64){
+        let mut c = ExecutionContext::default();
+        c.self_address = address.clone();
+        c.gas_limit = gas_limit;
+        c.value_sent = value;
+        c.sender = sender.clone();
+        if self.context_stack.len() == 0 {
+            c.origin = sender.clone();
+        }else{
+            c.origin = self.peek_context(0).unwrap().sender.clone();
+        }
+        c.execution_type = ExecutionType::Call;
+        self.push_context(c);
+    }
 }
 
 
@@ -327,10 +341,9 @@ impl CallSystem for TestbenchCallSystem{
 }
 
 impl TestbenchCallSystem{
-    pub fn execute_contract_from_stack(&mut self, stack: &mut ContractCallStack) -> Result<NeutronVMResult, NeutronError>{
+    pub fn execute_top_context(&mut self, stack: &mut ContractCallStack) -> Result<NeutronVMResult, NeutronError>{
         self.db.checkpoint().unwrap();
-        let version = stack.peek_sccs(0)?; //todo, replace with peek_sccs_u32 or something
-        if version[0] == 2 {
+        if stack.current_context().self_address.version == 2 {
             let mut vm = X86Interface::new(self, stack);
             println!("Executing x86 VM");
             match vm.execute(){
@@ -367,7 +380,7 @@ impl TestbenchCallSystem{
         stack.push_sccs(&section_info).unwrap(); //code section count
         stack.push_sccs(&vec![2, 0, 0, 0]).unwrap(); //vmversion (fill in properly later)
 
-        self.execute_contract_from_stack(stack)
+        self.execute_top_context(stack)
     }
 }
 
