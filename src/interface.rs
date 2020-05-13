@@ -2,11 +2,8 @@ extern crate neutron_star_constants;
 extern crate ring;
 extern crate struct_deser;
 extern crate elf;
-#[macro_use]
 use struct_deser_derive::*;
-use neutron_star_constants::*;
 use crate::addressing::*;
-use qx86::vm::*;
 use crate::hypervisor::*;
 use crate::db::*;
 use std::path::PathBuf;
@@ -258,7 +255,7 @@ impl ContractCallStack{
             c.origin = self.peek_context(0).unwrap().sender.clone();
         }
         c.execution_type = ExecutionType::Call;
-        self.push_context(c);
+        self.push_context(c).unwrap();
     }
 }
 
@@ -319,7 +316,7 @@ impl CallSystem for TestbenchCallSystem{
         let mut k = vec![space];
         k.extend_from_slice(key);
         match self.db.read_key(&stack.current_context().self_address.to_short_address(), &k) {
-            Err(e) => {
+            Err(_e) => {
                 Err(NeutronError::UnrecoverableFailure)
             },
             Ok(v) => {

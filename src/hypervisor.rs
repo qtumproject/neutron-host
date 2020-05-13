@@ -1,10 +1,92 @@
 extern crate qx86;
 extern crate neutron_star_constants;
+
 use qx86::vm::*;
 use crate::*;
 use neutron_star_constants::*;
 use interface::*;
 
+
+/*
+Summary of interface:
+
+Note: returning u64 values uses the EAX:EDX "mostly but not quite" standard cdcel convention
+Order of registers: EAX, ECX, EDX
+
+-- SCCS functions
+Interrupt 0x10: push_sccs (buffer, size)
+Interrupt 0x11: pop_sccs (buffer, max_size) -> actual_size: u32
+Interrupt 0x12: peek_sccs (buffer, max_size, index) -> actual_size: u32
+Interrupt 0x13: swap_sccs (index)
+Interrupt 0x14: dup_sccs()
+Interrupt 0x15: sccs_item_count() -> size
+Interrupt 0x16: sccs_memory_size() -> size
+Interrupt 0x17: sccs_memory_remaining() -> size
+Interrupt 0x18: sccs_item_limit_remaining() -> size
+
+-- CallSystem functions
+Interrupt 0x20: system_call(feature, function) -> error:u32
+
+-- Hypervisor functions
+Interrupt 0x80: alloc_memory TBD
+
+-- Context functions
+Interrupt 0x90: gas_limit() -> u64
+Interrupt 0x91: self_address() -- result on stack as NeutronShortAddress
+Interrupt 0x92: origin() -- result on stack as NeutronShortAddress
+Interrupt 0x93: origin_long() -- result on stack as NeutronLongAddress
+Interrupt 0x94: sender() -- result on stack as NeutronShortAddress
+Interrupt 0x95: sender_long() -- result on stack as NeutronLongAddress
+Interrupt 0x96: value_sent() -> u64
+Interrupt 0x97: nest_level() -> u32
+Interrupt 0x98: gas_remaining() -> u64
+Interrupt 0x99: execution_type() -> u32
+
+-- System interrupts
+Interrupt 0xFE: revert_execution(status) -> noreturn
+Interrupt 0xFF: exit_execution(status) -> noreturn
+
+*/
+
+#[derive(FromPrimitive)]
+enum StackInterrupt{
+    Push = 0x10,
+    Pop,
+    Peek,
+    Swap,
+    Dup,
+    ItemCount,
+    StackSize,
+    StackSizeRemaining,
+    ItemLimitRemaining
+
+}
+#[derive(FromPrimitive)]
+enum CallSystemInterrupt{
+    SystemCall = 0x20
+}
+#[derive(FromPrimitive)]
+enum HypervisorInterrupt{
+    AllocMemory = 0x80
+}
+#[derive(FromPrimitive)]
+enum ExecInfoInterrupt{
+    GasLimit = 0x90,
+    SelfAddress,
+    Origin,
+    OriginLong,
+    Sender,
+    SenderLong,
+    ValueSent,
+    NestLevel,
+    GasRemaining,
+    ExecutionType
+}
+#[derive(FromPrimitive)]
+enum SystemInterrupt{
+    RevertExecution = 0xFE,
+    ExitExecution = 0xFF
+}
 
 
 
@@ -38,7 +120,7 @@ impl<'a> X86Interface<'a> {
     const CODE_SECTION_SPACE: u8 = 1;
     const DATA_SECTION_SPACE: u8 = 2;
 
-    pub fn new<'b>(cs: &'b mut CallSystem, stack: &'b mut ContractCallStack) -> X86Interface<'b>{
+    pub fn new<'b>(cs: &'b mut dyn CallSystem, stack: &'b mut ContractCallStack) -> X86Interface<'b>{
         X86Interface{
             call_stack: stack,
             call_system: cs,
@@ -193,57 +275,40 @@ impl<'a> X86Interface<'a> {
 
         Ok(())
     }
+    fn stack_interrupt(&mut self, vm: &mut VM, function: StackInterrupt) -> Result<(), NeutronError>{
+        Ok(())
+    }
+    fn translate_interrupt_result(&mut self, vm: &mut VM, result: Result<(), NeutronError>) -> Result<(), VMError>{
+        match result{
+            Ok(_) => {
+                return Ok(());
+            },
+            Err(e) => {
+                if e == NeutronError::UnrecoverableFailure{
+                    return Err(VMError::SyscallError);
+                }else{
+                    vm.set_reg32(Reg32::EAX, 0xF0000000); //need a proper error code?
+                    return Ok(());
+                }
+            }
+        }
+    }
 }
-
-/*
-Summary of interface:
-
-Note: returning u64 values uses the EAX:EDX "mostly but not quite" standard cdcel convention
-
-Interrupt 0x10: push_sccs (buffer, size)
-Interrupt 0x11: pop_sccs (buffer, max_size) -> actual_size: u32
-Interrupt 0x12: peek_sccs (buffer, max_size, index) -> actual_size: u32
-Interrupt 0x13: swap_sccs (index)
-Interrupt 0x14: dup_sccs()
-Interrupt 0x15: gas_remaining()
-Interrupt 0x16: exit_execution(status)
-Interrupt 0x17: revert_execution(status)
-Interrupt 0x18: execution_status()
-Interrupt 0x19: sccs_item_count() -> size
-Interrupt 0x1A: sccs_memory_size() -> size
-Interrupt 0x1B: sccs_memory_remaining() -> size
-Interrupt 0x1C: sccs_item_limit_remaining() -> size
-Interrupt 0x20: system_call() -> error
--- Hypervisor functions
-Interrupt 0x80: alloc_memory TBD
--- Context functions
-Interrupt 0x90: gas_used() -> u64
-Interrupt 0x91: self_address() -- result on stack as NeutronShortAddress
-Interrupt 0x92: origin() -- result on stack as NeutronShortAddress
-Interrupt 0x93: origin_long() -- result on stack as NeutronLongAddress
-Interrupt 0x94: sender() -- result on stack as NeutronShortAddress
-Interrupt 0x95: sender_long() -- result on stack as NeutronLongAddress
-Interrupt 0x96: value_sent() -> u64
-Interrupt 0x97: nest_level() -> u32
-*/
-
-const PUSH_INTERRUPT:u8 = 0x10;
-const POP_INTERRUPT:u8 = 0x11;
-const PEEK_INTERRUPT:u8 = 0x12;
-const SWAP_INTERRUPT:u8 = 0x13;
-const DUP_INTERRUPT:u8 = 0x14;
-const SYSTEM_CALL_INTERRUPT:u8 = 0x20;
-const EXIT_INTERRUPT:u8 = 0xFF;
-const REVERT_INTERRUPT:u8 = 0xFE;
 
 impl <'a> Hypervisor for X86Interface<'a> {
     
     fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
-        if num == EXIT_INTERRUPT{
+        let call = num::FromPrimitive::from_u8(num);
+        if call.is_some(){
+            let result = self.stack_interrupt(vm, call.unwrap());
+            return self.translate_interrupt_result(vm, result);
+        }
+
+        if num == SystemInterrupt::ExitExecution as u8{
             self.call_system.log_debug("Exit interrupt triggered");
             return Err(VMError::InternalVMStop);
         }
-        if num == SYSTEM_CALL_INTERRUPT{
+        if num == CallSystemInterrupt::SystemCall as u8{
             let feature = vm.reg32(Reg32::EAX);
             let function = vm.reg32(Reg32::ECX);
             let result = self.call_system.system_call(self.call_stack, feature, function);
