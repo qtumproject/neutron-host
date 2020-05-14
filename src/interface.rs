@@ -104,6 +104,8 @@ pub struct BlockContext{
 	pub previous_hashes: Vec<[u8; 32]>
 }
 
+
+//TODO: add error codes for recoverable failures
 /// The primary error structure of NeutronAPI calls
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NeutronError{
