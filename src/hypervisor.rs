@@ -6,6 +6,7 @@ use crate::*;
 use neutron_star_constants::*;
 use interface::*;
 
+use std::cmp;
 
 /*
 Summary of interface:
@@ -276,6 +277,30 @@ impl<'a> X86Interface<'a> {
         Ok(())
     }
     fn stack_interrupt(&mut self, vm: &mut VM, function: StackInterrupt) -> Result<(), NeutronError>{
+        match function{
+            StackInterrupt::Push => {
+                let address = vm.reg32(Reg32::EAX);
+                let size = vm.reg32(Reg32::ECX);
+                let memory = vm.copy_from_memory(address, size);
+                if memory.is_err(){
+                    return Err(NeutronError::RecoverableFailure);
+                }
+                let memory = memory.unwrap();
+                self.call_stack.push_sccs(memory)?;
+            },
+            StackInterrupt::Pop => {
+                let memory = self.call_stack.pop_sccs()?;
+                let address = vm.reg32(Reg32::EAX);
+                let max_size = cmp::min(vm.reg32(Reg32::ECX) as usize, memory.len());
+
+                let result = vm.copy_into_memory(address, &memory[0..max_size]);
+                if result.is_err(){
+                    return Err(NeutronError::RecoverableFailure);
+                }
+                vm.set_reg32(Reg32::EAX, memory.len() as u32); //set EAX to actual_size
+            }
+            _ => {}
+        };
         Ok(())
     }
     fn translate_interrupt_result(&mut self, vm: &mut VM, result: Result<(), NeutronError>) -> Result<(), VMError>{
@@ -334,6 +359,89 @@ impl <'a> Hypervisor for X86Interface<'a> {
             return Ok(());
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    struct DummyCallSystem{}
+    impl CallSystem for DummyCallSystem{
+        fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>{
+            Err(NeutronError::UnrecoverableFailure)
+        }
+        fn block_height(&self) -> Result<u32, NeutronError>{
+            Err(NeutronError::UnrecoverableFailure)
+        }
+        fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
+            Err(NeutronError::UnrecoverableFailure)
+        }
+        /// Write a state key to the database using the permanent storage feature set
+        /// Used for writing bytecode etc by VMs
+        fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>{
+            Err(NeutronError::UnrecoverableFailure)
+        }
+    }
+    #[test]
+    fn test_x86_sccs_push(){
+        let mut stack = ContractCallStack::default();
+        let mut cs = DummyCallSystem{};
+        {
+            let mut hv = X86Interface::new(&mut cs, &mut stack);
+            let mut vm = qx86::vm::VM::default();
+            let address = 0x8000_0000;
+            vm.memory.add_memory(0x8000_0000, 0x100).unwrap();
+            let item = vec![0, 1, 2, 3, 4];
+            vm.copy_into_memory(address, &item).unwrap();
+            vm.set_reg32(Reg32::EAX, address);
+            vm.set_reg32(Reg32::ECX, 5);
+            hv.interrupt(&mut vm, StackInterrupt::Push as u8).unwrap();
+            vm.set_reg32(Reg32::EAX, address);
+            vm.set_reg32(Reg32::ECX, 2);
+            hv.interrupt(&mut vm, StackInterrupt::Push as u8).unwrap();
+        }
+        assert_eq!(stack.sccs_item_count().unwrap(), 2);
+        let item = stack.pop_sccs().unwrap();
+        assert_eq!(item, vec![0, 1]);
+        let item = stack.pop_sccs().unwrap();
+        assert_eq!(item, vec![0, 1, 2, 3, 4]);
+        assert_eq!(stack.sccs_item_count().unwrap(), 0);
+    }
+    #[test]
+    fn test_x86_sccs_pop(){
+        let mut stack = ContractCallStack::default();
+        let mut cs = DummyCallSystem{};
+        let item = vec![9, 1, 2, 3, 4];
+        stack.push_sccs(&item).unwrap();
+        stack.push_sccs(&item).unwrap();
+        stack.push_sccs(&item[0..2]).unwrap();
+        {
+            let mut hv = X86Interface::new(&mut cs, &mut stack);
+            let mut vm = qx86::vm::VM::default();
+            let address = 0x8000_0000;
+            vm.memory.add_memory(0x8000_0000, 0x100).unwrap();
+            vm.set_reg32(Reg32::EAX, address);
+            vm.set_reg32(Reg32::ECX, 5); //max_size
+            hv.interrupt(&mut vm, StackInterrupt::Pop as u8).unwrap();
+            assert_eq!(vm.reg32(Reg32::EAX), 2, "VM got incorrect actual_size for SCCS item");
+            let data = vm.copy_from_memory(address, 5).unwrap();
+            assert_eq!(data.to_vec(), vec![9 as u8, 1, 0, 0, 0], "VM had incorrect data written into memory for SCCS item");
+
+            vm.set_reg32(Reg32::EAX, address + 0x10);
+            vm.set_reg32(Reg32::ECX, 2); //max_size
+            hv.interrupt(&mut vm, StackInterrupt::Pop as u8).unwrap();
+            assert_eq!(vm.reg32(Reg32::EAX), 5, "VM got incorrect actual_size for SCCS item");
+            let data = vm.copy_from_memory(address + 0x10, 5).unwrap();
+            assert_eq!(data.to_vec(), vec![9 as u8, 1, 0, 0, 0], "VM had incorrect data written into memory for SCCS item");
+
+            vm.set_reg32(Reg32::EAX, address + 0x20);
+            vm.set_reg32(Reg32::ECX, 5); //max_size
+            hv.interrupt(&mut vm, StackInterrupt::Pop as u8).unwrap();
+            assert_eq!(vm.reg32(Reg32::EAX), 5, "VM got incorrect actual_size for SCCS item");
+            let data = vm.copy_from_memory(address + 0x20, 5).unwrap();
+            assert_eq!(data.to_vec(), vec![9 as u8, 1, 2, 3, 4], "VM had incorrect data written into memory for SCCS item");
+        }
+        assert_eq!(stack.sccs_item_count().unwrap(), 0);
     }
 }
 
