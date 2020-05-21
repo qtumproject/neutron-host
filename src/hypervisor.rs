@@ -3,8 +3,8 @@ extern crate neutron_star_constants;
 
 use qx86::vm::*;
 use crate::*;
-use neutron_star_constants::*;
 use interface::*;
+use crate::callstack::*;
 
 use std::cmp;
 
@@ -247,7 +247,7 @@ impl<'a> X86Interface<'a> {
 
     pub fn create_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
         //validate version later on..
-        let version = self.call_stack.pop_sccs()?;
+        let _version = self.call_stack.pop_sccs()?;
 
         let section_info = self.call_stack.pop_sccs()?;
 
@@ -367,18 +367,18 @@ mod tests {
     use super::*;
     struct DummyCallSystem{}
     impl CallSystem for DummyCallSystem{
-        fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>{
+        fn system_call(&mut self, _stack: &mut ContractCallStack, _feature: u32, _function: u32) -> Result<u32, NeutronError>{
             Err(NeutronError::UnrecoverableFailure)
         }
         fn block_height(&self) -> Result<u32, NeutronError>{
             Err(NeutronError::UnrecoverableFailure)
         }
-        fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
+        fn read_state_key(&mut self, _stack: &mut ContractCallStack, _space: u8, _key: &[u8]) -> Result<Vec<u8>, NeutronError>{
             Err(NeutronError::UnrecoverableFailure)
         }
         /// Write a state key to the database using the permanent storage feature set
         /// Used for writing bytecode etc by VMs
-        fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>{
+        fn write_state_key(&mut self, _stack: &mut ContractCallStack, _space: u8, _key: &[u8], _value: &[u8]) -> Result<(), NeutronError>{
             Err(NeutronError::UnrecoverableFailure)
         }
     }

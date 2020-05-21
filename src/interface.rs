@@ -1,13 +1,7 @@
-extern crate neutron_star_constants;
-extern crate ring;
 extern crate struct_deser;
-extern crate elf;
 use struct_deser_derive::*;
 use crate::addressing::*;
-use crate::hypervisor::*;
-use crate::db::*;
-use std::path::PathBuf;
-use crate::syscall_interfaces::storage;
+use crate::callstack::*;
 
 /// The result of a smart contract execution
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -139,129 +133,13 @@ pub struct NeutronVersion{
     pub qtum_version: u32
 }
 
-#[derive(Default)]
-pub struct ContractCallStack{
-    data_stack: Vec<Vec<u8>>,
-    context_stack: Vec<ExecutionContext>
-}
 
-impl ContractCallStack{
-	/// Pushes an item to the Smart Contract Communication Stack
-	pub fn push_sccs(&mut self, data: &[u8]) -> Result<(), NeutronError>{
-        if data.len() > 0xFFFF{
-            return Err(NeutronError::RecoverableFailure);
-        }
-        self.data_stack.push(data.to_vec());
-        Ok(())
-    }
-    /// Pops an item off of the Smart Contract Communication Stack
-	pub fn pop_sccs(&mut self) -> Result<Vec<u8>, NeutronError>{
-        match self.data_stack.pop(){
-            None => {
-                return Err(NeutronError::RecoverableFailure);
-            },
-            Some(v) => {
-                return Ok(v);
-            }
-        }
-    }
-    /// Pops an item off of the Smart Contract Communication Stack
-	pub fn drop_sccs(&mut self) -> Result<(), NeutronError>{
-        if self.data_stack.len() == 0{
-            return Err(NeutronError::RecoverableFailure);
-        }
-        self.data_stack.pop();
-        Ok(())
-    }
-	/// Retrieves the top item on the Smart Contract Communication Stack without removing it
-	pub fn peek_sccs(&self, index: u32) -> Result<Vec<u8>, NeutronError>{
-        let i = (self.data_stack.len() as isize - 1) - index as isize;
-        if i < 0{
-            return Err(NeutronError::RecoverableFailure);
-        }
-        match self.data_stack.get(i as usize){
-            None => {
-                return Err(NeutronError::RecoverableFailure);
-            },
-            Some(v) => {
-                return Ok(v.to_vec());
-            }
-        }
-    }
-	/// Checks the size of the top item on the Smart Contract Communication Stack
-    //fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>;
-    /// Swaps the top item of the SCCS with the item of the desired index
-    /* TODO later
-    pub fn sccs_swap(&mut self,index: u32) -> Result<(), NeutronError>{
-        Ok(())
-    }
-    /// Replicates the desired item of the stack onto the top of the stack
-    pub fn sccs_dup(&mut self, index: u32) -> Result<(), NeutronError>{
-        Ok(())
-    }
-    */
-    /// Gets number of items in the sccs
-    pub fn sccs_item_count(&self) -> Result<u32, NeutronError>{
-        Ok(self.data_stack.len() as u32)
-    }
-    /// Get total memory occupied by the SCCS
-    /*
-    pub fn sccs_memory_amount(&self) -> Result<u32, NeutronError>{
-        Ok(0)
-    }
-    */
-    pub fn push_context(&mut self, context: ExecutionContext) -> Result<(), NeutronError>{
-        self.context_stack.push(context);
-        Ok(())
-    }
-    pub fn pop_context(&mut self) -> Result<ExecutionContext, NeutronError>{
-        match self.context_stack.pop(){
-            None => {
-                return Err(NeutronError::RecoverableFailure);
-            },
-            Some(v) => {
-                return Ok(v);
-            }
-        }
-    }
-    pub fn peek_context(&self, index: usize) -> Result<&ExecutionContext, NeutronError>{
-        let i = (self.context_stack.len() as isize - 1) - index as isize;
-        if i < 0{
-            return Err(NeutronError::RecoverableFailure);
-        }
-        match self.context_stack.get(i as usize){
-            None => {
-                return Err(NeutronError::RecoverableFailure);
-            },
-            Some(v) => {
-                return Ok(v);
-            }
-        }
-    }
-    pub fn context_count(&self) -> Result<usize, NeutronError>{
-        Ok(self.context_stack.len())
-    }
-	/// Retrieves the context information of the current smart contract execution
-	pub fn current_context(&self) -> &ExecutionContext{
-        //this should never error, so just unwrap
-        self.peek_context(0).unwrap()
-    }
-    pub fn create_call(&mut self, address: NeutronAddress, sender: NeutronAddress, gas_limit: u64, value: u64){
-        let mut c = ExecutionContext::default();
-        c.self_address = address.clone();
-        c.gas_limit = gas_limit;
-        c.value_sent = value;
-        c.sender = sender.clone();
-        if self.context_stack.len() == 0 {
-            c.origin = sender.clone();
-        }else{
-            c.origin = self.peek_context(0).unwrap().sender.clone();
-        }
-        c.execution_type = ExecutionType::Call;
-        self.push_context(c).unwrap();
-    }
-}
 
+
+
+pub trait VMInterface{
+    fn execute(&mut self) -> Result<NeutronVMResult, NeutronError>;
+}
 
 pub trait CallSystem{
     /// General system call interface
@@ -287,117 +165,6 @@ pub trait CallSystem{
     }
     fn log_debug(&self, msg: &str){
         println!("Debug Message: {}", msg);
-    }
-}
-
-pub trait VMInterface{
-    fn execute(&mut self) -> Result<NeutronVMResult, NeutronError>;
-}
-
-
-//later rename to Testbench?
-#[derive(Default)]
-pub struct TestbenchCallSystem{
-    pub transaction: TransactionContext,
-    pub db: ProtoDB
-    //etc...
-}
-
-impl storage::GlobalStorage for TestbenchCallSystem{
-    fn store_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        Err(NeutronError::UnrecoverableFailure)
-    }
-    fn load_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        Err(NeutronError::UnrecoverableFailure)
-    }
-    fn key_exists(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        Err(NeutronError::UnrecoverableFailure)
-    }
-}
-
-impl CallSystem for TestbenchCallSystem{
-    fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>{
-        //go through each interface implementations until one returns true or an error occurs
-        if (self as &mut storage::GlobalStorage).try_syscall(stack, feature, function)? == true{
-            return Ok(0);
-        }
-        
-
-        Ok(0)
-    }
-    /// Get the current block height at execution
-    /// Used to switch VM behavior in blockchain forks
-    fn block_height(&self) -> Result<u32, NeutronError>{
-        Ok(1)
-    }
-    /// Read a state key from the database using the permanent storage feature set
-    /// Used for reading core contract bytecode by VMs
-    fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
-        let mut k = vec![space];
-        k.extend_from_slice(key);
-        match self.db.read_key(&stack.current_context().self_address.to_short_address(), &k) {
-            Err(_e) => {
-                Err(NeutronError::UnrecoverableFailure)
-            },
-            Ok(v) => {
-                Ok(v)
-            }
-        }
-    }
-    /// Write a state key to the database using the permanent storage feature set
-    /// Used for writing bytecode etc by VMs
-    fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>{
-        let mut k = vec![space];
-        k.extend_from_slice(key);
-        if self.db.write_key(&stack.current_context().self_address.to_short_address(), &k, value).is_err(){
-            Err(NeutronError::UnrecoverableFailure)
-        }else{
-            Ok(())
-        }
-    }
-}
-
-impl TestbenchCallSystem{
-    pub fn execute_top_context(&mut self, stack: &mut ContractCallStack) -> Result<NeutronVMResult, NeutronError>{
-        self.db.checkpoint().unwrap();
-        if stack.current_context().self_address.version == 2 {
-            let mut vm = X86Interface::new(self, stack);
-            println!("Executing x86 VM");
-            match vm.execute(){
-                Err(e) => {
-                    self.db.clear_checkpoints();
-                    return Err(e);
-                },
-                Ok(v) => {
-                    if self.db.commit().is_err(){
-                        println!("database error with commit");
-                        self.db.clear_checkpoints();
-                        return Err(NeutronError::UnrecoverableFailure);
-                    }
-                    return Ok(v);
-                }
-            }
-        }else{
-            return Err(NeutronError::UnrecoverableFailure);
-        }
-    }
-    pub fn deploy_from_elf(&mut self, stack: &mut ContractCallStack, file: String) -> Result<NeutronVMResult, NeutronError>{
-        assert!(stack.context_count()? == 1, "Exactly one context should be pushed to the ContractCallStack");
-        let path = PathBuf::from(file);
-        let file = elf::File::open_path(&path).unwrap();
-    
-        let text_scn = file.get_section(".text").unwrap();
-        assert!(text_scn.shdr.addr == 0x10000);
-        let data_scn = file.get_section(".data").unwrap();
-        assert!(data_scn.shdr.addr == 0x80020000);
-    
-        stack.push_sccs(&data_scn.data).unwrap();
-        stack.push_sccs(&text_scn.data).unwrap();
-        let section_info = vec![1, 1];
-        stack.push_sccs(&section_info).unwrap(); //code section count
-        stack.push_sccs(&vec![2, 0, 0, 0]).unwrap(); //vmversion (fill in properly later)
-
-        self.execute_top_context(stack)
     }
 }
 
