@@ -3,7 +3,7 @@ use std::collections::HashMap;
 //use std::collections::HashSet;
 use neutron_star_constants::*;
 
-pub const NEUTRONDB_USER_PREFIX: u8 = '_' as u8;
+pub const NEUTRONDB_USER_SPACE: u8 = '_' as u8;
 
 #[derive(Debug)]
 pub enum NeutronDBError{

@@ -292,10 +292,24 @@ impl<'a> X86Interface<'a> {
                 let memory = self.call_stack.pop_sccs()?;
                 let address = vm.reg32(Reg32::EAX);
                 let max_size = cmp::min(vm.reg32(Reg32::ECX) as usize, memory.len());
-
-                let result = vm.copy_into_memory(address, &memory[0..max_size]);
-                if result.is_err(){
-                    return Err(NeutronError::RecoverableFailure);
+                if address != 0 && max_size != 0{
+                    let result = vm.copy_into_memory(address, &memory[0..max_size]);
+                    if result.is_err(){
+                        return Err(NeutronError::RecoverableFailure);
+                    }
+                }
+                vm.set_reg32(Reg32::EAX, memory.len() as u32); //set EAX to actual_size
+            },
+            StackInterrupt::Peek => {
+                let index = vm.reg32(Reg32::EDX);
+                let memory = self.call_stack.peek_sccs(index)?;
+                let address = vm.reg32(Reg32::EAX);
+                let max_size = cmp::min(vm.reg32(Reg32::ECX) as usize, memory.len());
+                if address != 0 && max_size != 0{
+                    let result = vm.copy_into_memory(address, &memory[0..max_size]);
+                    if result.is_err(){
+                        return Err(NeutronError::RecoverableFailure);
+                    }
                 }
                 vm.set_reg32(Reg32::EAX, memory.len() as u32); //set EAX to actual_size
             }
@@ -442,6 +456,69 @@ mod tests {
             assert_eq!(data.to_vec(), vec![9 as u8, 1, 2, 3, 4], "VM had incorrect data written into memory for SCCS item");
         }
         assert_eq!(stack.sccs_item_count().unwrap(), 0);
+    }
+    #[test]
+    fn test_x86_sccs_drop(){
+        let mut stack = ContractCallStack::default();
+        let mut cs = DummyCallSystem{};
+        let item = vec![9, 1, 2, 3, 4];
+        stack.push_sccs(&item).unwrap();
+        {
+            let mut hv = X86Interface::new(&mut cs, &mut stack);
+            let mut vm = qx86::vm::VM::default();
+            let address = 0; //null pointer
+            vm.set_reg32(Reg32::EAX, address);
+            vm.set_reg32(Reg32::ECX, 0); //max_size (null)
+            hv.interrupt(&mut vm, StackInterrupt::Pop as u8).unwrap();
+            assert_eq!(vm.reg32(Reg32::EAX), 5, "VM got incorrect actual_size for SCCS item");
+        }
+        assert_eq!(stack.sccs_item_count().unwrap(), 0);
+    }
+    #[test]
+    fn test_x86_sccs_peek(){
+        let mut stack = ContractCallStack::default();
+        let mut cs = DummyCallSystem{};
+        let item = vec![9, 1, 2, 3, 4];
+        stack.push_sccs(&item).unwrap();
+        stack.push_sccs(&item).unwrap();
+        stack.push_sccs(&item[0..2]).unwrap();
+        {
+            let mut hv = X86Interface::new(&mut cs, &mut stack);
+            let mut vm = qx86::vm::VM::default();
+            let address = 0x8000_0000;
+            vm.memory.add_memory(0x8000_0000, 0x100).unwrap();
+            vm.set_reg32(Reg32::EAX, address);
+            vm.set_reg32(Reg32::ECX, 5); //max_size
+            vm.set_reg32(Reg32::EDX, 0); //index
+            hv.interrupt(&mut vm, StackInterrupt::Peek as u8).unwrap();
+            assert_eq!(vm.reg32(Reg32::EAX), 2, "VM got incorrect actual_size for SCCS item");
+            let data = vm.copy_from_memory(address, 5).unwrap();
+            assert_eq!(data.to_vec(), vec![9 as u8, 1, 0, 0, 0], "VM had incorrect data written into memory for SCCS item");
+
+            vm.set_reg32(Reg32::EAX, address + 0x10);
+            vm.set_reg32(Reg32::ECX, 2); //max_size
+            vm.set_reg32(Reg32::EDX, 1); //index
+            hv.interrupt(&mut vm, StackInterrupt::Peek as u8).unwrap();
+            assert_eq!(vm.reg32(Reg32::EAX), 5, "VM got incorrect actual_size for SCCS item");
+            let data = vm.copy_from_memory(address + 0x10, 5).unwrap();
+            assert_eq!(data.to_vec(), vec![9 as u8, 1, 0, 0, 0], "VM had incorrect data written into memory for SCCS item");
+
+            vm.set_reg32(Reg32::EAX, address + 0x20);
+            vm.set_reg32(Reg32::ECX, 5); //max_size
+            vm.set_reg32(Reg32::EDX, 2); //index
+            hv.interrupt(&mut vm, StackInterrupt::Peek as u8).unwrap();
+            assert_eq!(vm.reg32(Reg32::EAX), 5, "VM got incorrect actual_size for SCCS item");
+            let data = vm.copy_from_memory(address + 0x20, 5).unwrap();
+            assert_eq!(data.to_vec(), vec![9 as u8, 1, 2, 3, 4], "VM had incorrect data written into memory for SCCS item");
+
+            //null buffer test
+            vm.set_reg32(Reg32::EAX, 0);
+            vm.set_reg32(Reg32::ECX, 0); //max_size
+            vm.set_reg32(Reg32::EDX, 2); //index
+            hv.interrupt(&mut vm, StackInterrupt::Peek as u8).unwrap();
+            assert_eq!(vm.reg32(Reg32::EAX), 5, "VM got incorrect actual_size for SCCS item");
+        }
+        assert_eq!(stack.sccs_item_count().unwrap(), 3);
     }
 }
 

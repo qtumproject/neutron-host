@@ -171,13 +171,6 @@ pub trait CallSystem{
 
 
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
  
     /*
     leftovers from NeutronAPI that need to be implemented in system contracts

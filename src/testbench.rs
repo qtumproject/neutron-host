@@ -20,12 +20,17 @@ pub struct TestbenchCallSystem{
 
 impl storage::GlobalStorage for TestbenchCallSystem{
     fn store_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        Err(NeutronError::UnrecoverableFailure)
+        let key = stack.pop_sccs()?;
+        let value = stack.pop_sccs()?;
+        self.write_state_key(stack, NEUTRONDB_USER_SPACE, &key, &value)
     }
     fn load_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        Err(NeutronError::UnrecoverableFailure)
+        let key = stack.pop_sccs()?;
+        let value = self.read_state_key(stack, NEUTRONDB_USER_SPACE, &key)?;
+        stack.push_sccs(&value)?;
+        Ok(())
     }
-    fn key_exists(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
+    fn key_exists(&mut self, _stack: &mut ContractCallStack) -> Result<(), NeutronError>{
         Err(NeutronError::UnrecoverableFailure)
     }
 }
@@ -113,5 +118,14 @@ impl TestbenchCallSystem{
         stack.push_sccs(&vec![2, 0, 0, 0]).unwrap(); //vmversion (fill in properly later)
 
         self.execute_top_context(stack)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4);
     }
 }
