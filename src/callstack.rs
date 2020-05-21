@@ -1,6 +1,9 @@
 use crate::interface::*;
 use crate::addressing::*;
 
+/// The primary call stack which is used for almost all communication purposes between the system call layer and VMs
+/// It contains context information for the current smart contracts being executed and a shared general purpose stack
+/// All smart contract VMs should use this structure for all communication purposes with "the outside world"
 #[derive(Default)]
 pub struct ContractCallStack{
     data_stack: Vec<Vec<u8>>,
@@ -62,20 +65,25 @@ impl ContractCallStack{
         Ok(())
     }
     */
+
     /// Gets number of items in the sccs
     pub fn sccs_item_count(&self) -> Result<u32, NeutronError>{
         Ok(self.data_stack.len() as u32)
     }
+    
     /// Get total memory occupied by the SCCS
     /*
     pub fn sccs_memory_amount(&self) -> Result<u32, NeutronError>{
         Ok(0)
     }
     */
+
+    /// Pushes a new execution context into the stack
     pub fn push_context(&mut self, context: ExecutionContext) -> Result<(), NeutronError>{
         self.context_stack.push(context);
         Ok(())
     }
+    /// Removes the top execution context from the stack
     pub fn pop_context(&mut self) -> Result<ExecutionContext, NeutronError>{
         match self.context_stack.pop(){
             None => {
@@ -86,6 +94,7 @@ impl ContractCallStack{
             }
         }
     }
+    /// Peeks information from the execution context stack without modifying it
     pub fn peek_context(&self, index: usize) -> Result<&ExecutionContext, NeutronError>{
         let i = (self.context_stack.len() as isize - 1) - index as isize;
         if i < 0{
@@ -100,26 +109,67 @@ impl ContractCallStack{
             }
         }
     }
+    /// The total number of smart contract contexts currently involved in the overall execution
     pub fn context_count(&self) -> Result<usize, NeutronError>{
         Ok(self.context_stack.len())
     }
+
 	/// Retrieves the context information of the current smart contract execution
 	pub fn current_context(&self) -> &ExecutionContext{
         //this should never error, so just unwrap
         self.peek_context(0).unwrap()
     }
-    pub fn create_call(&mut self, address: NeutronAddress, sender: NeutronAddress, gas_limit: u64, value: u64){
+
+    /// Creates a top level context for calling an existing contract. The context stack MUST be empty
+    pub fn create_top_level_call(&mut self, address: NeutronAddress, sender: NeutronAddress, gas_limit: u64, value: u64){
+        assert!(self.context_stack.len() == 0);
         let mut c = ExecutionContext::default();
         c.self_address = address.clone();
         c.gas_limit = gas_limit;
         c.value_sent = value;
         c.sender = sender.clone();
-        if self.context_stack.len() == 0 {
-            c.origin = sender.clone();
-        }else{
-            c.origin = self.peek_context(0).unwrap().sender.clone();
-        }
+        c.origin = sender.clone();
         c.execution_type = ExecutionType::Call;
         self.push_context(c).unwrap();
     }
+    /// Creates a top level context for deploying a new contract. The context stack MUST be empty
+    pub fn create_top_level_deploy(&mut self, address: NeutronAddress, sender: NeutronAddress, gas_limit: u64, value: u64){
+        assert!(self.context_stack.len() == 0);
+        //todo: dedupicate
+        let mut c = ExecutionContext::default();
+        c.self_address = address.clone();
+        c.gas_limit = gas_limit;
+        c.value_sent = value;
+        c.sender = sender.clone();
+        c.origin = sender.clone();
+        c.execution_type = ExecutionType::Deploy;
+        self.push_context(c).unwrap();
+    }
+    /// Creates a new nested context for calling an existing contract. The context stack MUST NOT be empty
+    pub fn create_call(&mut self, address: NeutronAddress, gas_limit: u64, value: u64){
+        assert!(self.context_stack.len() > 0);
+        let mut c = ExecutionContext::default();
+        c.self_address = address.clone();
+        c.gas_limit = gas_limit;
+        c.value_sent = value;
+        c.sender = self.peek_context(0).unwrap().self_address.clone();
+        c.origin = self.context_stack.get(0).unwrap().sender.clone();
+        c.execution_type = ExecutionType::Call;
+        self.push_context(c).unwrap();
+    }
+    /// Creates a new nested context for deploying a contract. The context stack MUST NOT be empty
+    pub fn create_deploy(&mut self, address: NeutronAddress, gas_limit: u64, value: u64){
+        assert!(self.context_stack.len() > 0);
+        let mut c = ExecutionContext::default();
+        c.self_address = address.clone();
+        c.gas_limit = gas_limit;
+        c.value_sent = value;
+        c.sender = self.peek_context(0).unwrap().self_address.clone();
+        c.origin = self.context_stack.get(0).unwrap().sender.clone();
+        c.execution_type = ExecutionType::Deploy;
+        self.push_context(c).unwrap();
+    }
+
+
+
 }
