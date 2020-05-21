@@ -90,7 +90,7 @@ enum SystemInterrupt{
 }
 
 
-
+/// The VM interface for executing x86 smart contracts in Neutron
 pub struct X86Interface<'a>{
     pub call_system: &'a mut dyn CallSystem,
     pub call_stack: &'a mut ContractCallStack,
@@ -99,6 +99,7 @@ pub struct X86Interface<'a>{
 }
 
 impl<'a> VMInterface for X86Interface<'a>{
+    /// Begins execution of x86 smart contract by interpreting the type fo execution needed using the current_context
     fn execute(&mut self) -> Result<NeutronVMResult, NeutronError>{
         let ctx = self.call_stack.current_context();
         match ctx.execution_type{
@@ -121,6 +122,7 @@ impl<'a> X86Interface<'a> {
     const CODE_SECTION_SPACE: u8 = 1;
     const DATA_SECTION_SPACE: u8 = 2;
 
+    /// Creates a new instance of the X86Interface
     pub fn new<'b>(cs: &'b mut dyn CallSystem, stack: &'b mut ContractCallStack) -> X86Interface<'b>{
         X86Interface{
             call_stack: stack,
@@ -129,7 +131,7 @@ impl<'a> X86Interface<'a> {
             data_sections: Vec::default()
         }
     }
-
+    
     fn deploy(&mut self) -> Result<NeutronVMResult, NeutronError>{
         let mut vm = VM::default();
         println!("starting x86");
@@ -192,6 +194,7 @@ impl<'a> X86Interface<'a> {
         Ok(r)
     }
 
+    /// Will store all of the currently loaded code and data sections using the associated CallSystem's storage functions
     fn store_contract_code(&mut self) -> Result<(), NeutronError>{
         let code_key = vec![X86Interface::CODE_SECTION_SPACE, 0];
         let data_key = vec![X86Interface::DATA_SECTION_SPACE, 0];
@@ -199,6 +202,7 @@ impl<'a> X86Interface<'a> {
         self.call_system.write_state_key(self.call_stack, X86Interface::X86_SPACE, &data_key, &self.data_sections[0])?;
         Ok(())
     }
+    /// Will load all of the currently available code and data sections using the associated CallSystem's storage functions
     fn load_contract_code(&mut self) -> Result<(), NeutronError>{
         //todo need to store section counts
         let code_key = vec![X86Interface::CODE_SECTION_SPACE, 0];
@@ -208,12 +212,14 @@ impl<'a> X86Interface<'a> {
         Ok(())
     }
 
-    pub fn init_cpu(&mut self, vm: &mut VM) -> Result<(), VMError>{
+    /// Will create a new instance of an x86 VM
+    fn init_cpu(&mut self, vm: &mut VM) -> Result<(), VMError>{
         self.init_memory(vm)?;
         vm.gas_remaining = self.call_stack.current_context().gas_limit;
         vm.eip = 0x10000;
         Ok(())
     }
+    /// Initializes all of the memory areas that are expected to be within a Neutron-x86 VM
     fn init_memory(&mut self, vm: &mut VM) -> Result<(), VMError>{
         //for now, just make all memories max size
         //code memories
@@ -244,8 +250,8 @@ impl<'a> X86Interface<'a> {
         vm.memory.add_memory(0x80030000, 0xFFFF)?;
         Ok(())
     }
-
-    pub fn create_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
+    /// Will create a new contract using data pushed onto the SCCS and current_context
+    fn create_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
         //validate version later on..
         let _version = self.call_stack.pop_sccs()?;
 
@@ -266,7 +272,7 @@ impl<'a> X86Interface<'a> {
 
         Ok(())
     }
-
+    /// Will call an existing contract by using data pushed onto the SCCS and current_context
     fn call_contract_from_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>{
         //validate version later on..
         self.load_contract_code()?;
@@ -276,6 +282,7 @@ impl<'a> X86Interface<'a> {
 
         Ok(())
     }
+    /// Handles all SCCS interrupts
     fn stack_interrupt(&mut self, vm: &mut VM, function: StackInterrupt) -> Result<(), NeutronError>{
         match function{
             StackInterrupt::Push => {
@@ -317,6 +324,7 @@ impl<'a> X86Interface<'a> {
         };
         Ok(())
     }
+    /// Will translate NeutronError into appropriate register values in the VM and to trigger a proper unrecoverable VMError if needed
     fn translate_interrupt_result(&mut self, vm: &mut VM, result: Result<(), NeutronError>) -> Result<(), VMError>{
         match result{
             Ok(_) => {
@@ -335,7 +343,7 @@ impl<'a> X86Interface<'a> {
 }
 
 impl <'a> Hypervisor for X86Interface<'a> {
-    
+    /// The primary interface into the hypervisor from the VM programs. This is triggered by using an `INT` opcode within the VM program
     fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
         let call = num::FromPrimitive::from_u8(num);
         if call.is_some(){
