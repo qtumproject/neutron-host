@@ -7,6 +7,7 @@ use crate::addressing::*;
 use crate::hypervisor::*;
 use crate::db::*;
 use std::path::PathBuf;
+use crate::syscall_interfaces::storage;
 
 /// The result of a smart contract execution
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -302,9 +303,26 @@ pub struct TestbenchCallSystem{
     //etc...
 }
 
+impl storage::GlobalStorage for TestbenchCallSystem{
+    fn store_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
+        Err(NeutronError::UnrecoverableFailure)
+    }
+    fn load_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
+        Err(NeutronError::UnrecoverableFailure)
+    }
+    fn key_exists(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
+        Err(NeutronError::UnrecoverableFailure)
+    }
+}
+
 impl CallSystem for TestbenchCallSystem{
     fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>{
-        println!("system call received");
+        //go through each interface implementations until one returns true or an error occurs
+        if (self as &mut storage::GlobalStorage).try_syscall(stack, feature, function)? == true{
+            return Ok(0);
+        }
+        
+
         Ok(0)
     }
     /// Get the current block height at execution
