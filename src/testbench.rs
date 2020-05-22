@@ -8,6 +8,8 @@ use std::path::PathBuf;
 use crate::syscall_interfaces::storage;
 use crate::interface::*;
 use crate::callstack::*;
+use crate::neutronerror::*;
+use crate::neutronerror::NeutronError::*;
 
 
 //later rename to Testbench?
@@ -31,7 +33,7 @@ impl storage::GlobalStorage for TestbenchCallSystem{
         Ok(())
     }
     fn key_exists(&mut self, _stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        Err(NeutronError::UnrecoverableFailure)
+        Err(Unrecoverable(UnrecoverableError::NotImplemented))
     }
 }
 
@@ -57,7 +59,7 @@ impl CallSystem for TestbenchCallSystem{
         k.extend_from_slice(key);
         match self.db.read_key(&stack.current_context().self_address.to_short_address(), &k) {
             Err(_e) => {
-                Err(NeutronError::UnrecoverableFailure)
+                Err(Unrecoverable(UnrecoverableError::StateOutOfRent))
             },
             Ok(v) => {
                 Ok(v)
@@ -70,7 +72,7 @@ impl CallSystem for TestbenchCallSystem{
         let mut k = vec![space];
         k.extend_from_slice(key);
         if self.db.write_key(&stack.current_context().self_address.to_short_address(), &k, value).is_err(){
-            Err(NeutronError::UnrecoverableFailure)
+            Err(Unrecoverable(UnrecoverableError::DatabaseWritingError))
         }else{
             Ok(())
         }
@@ -92,15 +94,16 @@ impl TestbenchCallSystem{
                     if self.db.commit().is_err(){
                         println!("database error with commit");
                         self.db.clear_checkpoints();
-                        return Err(NeutronError::UnrecoverableFailure);
+                        return Err(Unrecoverable(UnrecoverableError::DatabaseCommitError));
                     }
                     return Ok(v);
                 }
             }
         }else{
-            return Err(NeutronError::UnrecoverableFailure);
+            return Err(Unrecoverable(UnrecoverableError::UnknownVM));
         }
     }
+    
     pub fn deploy_from_elf(&mut self, stack: &mut ContractCallStack, file: String) -> Result<NeutronVMResult, NeutronError>{
         assert!(stack.context_count()? == 1, "Exactly one context should be pushed to the ContractCallStack");
         let path = PathBuf::from(file);

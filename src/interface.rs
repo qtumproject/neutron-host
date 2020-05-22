@@ -2,6 +2,8 @@ extern crate struct_deser;
 use struct_deser_derive::*;
 use crate::addressing::*;
 use crate::callstack::*;
+use crate::neutronerror::*;
+
 
 /// The result of a smart contract execution
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -100,18 +102,6 @@ pub struct BlockContext{
 }
 
 
-//TODO: add error codes for recoverable failures
-/// The primary error structure of NeutronAPI calls
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum NeutronError{
-	/// Success, no error has occured
-	Success,
-	/// An error has occured, but if the VM implements an error handling system, it is appropriate to allow this error
-    /// to be handled by the smart contract and for execution to continue
-	RecoverableFailure,
-    /// An error has occured and the VM should immediately terminate, not allowing the smart contract to detect or handle this error in any capacity
-    UnrecoverableFailure
-}
 
 /*
 typedef struct{

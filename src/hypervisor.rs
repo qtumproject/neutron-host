@@ -5,6 +5,8 @@ use qx86::vm::*;
 use crate::*;
 use interface::*;
 use crate::callstack::*;
+use crate::neutronerror::NeutronError::*;
+use crate::neutronerror::*;
 
 use std::cmp;
 
@@ -105,6 +107,7 @@ impl<'a> VMInterface for X86Interface<'a>{
         match ctx.execution_type{
             ExecutionType::BareExecution => {
                 //..
+                return Err(Unrecoverable(UnrecoverableError::NotImplemented));
             },
             ExecutionType::Call => {
                 return self.call();
@@ -113,7 +116,6 @@ impl<'a> VMInterface for X86Interface<'a>{
                 return self.deploy();
             }
         }
-        Err(NeutronError::RecoverableFailure) //todo
     }
 }
 
@@ -136,13 +138,15 @@ impl<'a> X86Interface<'a> {
         let mut vm = VM::default();
         println!("starting x86");
         if self.init_cpu(&mut vm).is_err(){
-            return Err(NeutronError::UnrecoverableFailure);
+            return Err(Unrecoverable(UnrecoverableError::ErrorInitializingVM));
         }
         println!("x86 initialized");
         self.create_contract_from_sccs(&mut vm)?;
         let result = vm.execute(self);
         if result.is_err(){
-            return Err(NeutronError::UnrecoverableFailure);
+            vm.print_diagnostics();
+            self.call_system.log_warning(&format!("Contract encountered an execution error: {:?}", result.unwrap_err()));
+            return Err(Recoverable(RecoverableError::ContractExecutionError));
         }else{
             //???
         }
@@ -150,7 +154,7 @@ impl<'a> X86Interface<'a> {
         let return_code = vm.reg32(Reg32::EAX);
         if return_code != 0 {
             //if contract signaled error (but didn't actually crash/fail) then exit
-            return Err(NeutronError::RecoverableFailure);
+            return Err(Recoverable(RecoverableError::ContractSignaledError));
         }
         self.store_contract_code()?;
         let r = NeutronVMResult{
@@ -167,22 +171,20 @@ impl<'a> X86Interface<'a> {
         let mut vm = VM::default();
         println!("starting x86 call");
         if self.init_cpu(&mut vm).is_err(){
-            return Err(NeutronError::UnrecoverableFailure);
+            return Err(Unrecoverable(UnrecoverableError::ErrorInitializingVM));
         }
         println!("x86 initialized");
         self.call_contract_from_sccs(&mut vm)?;
         let result = vm.execute(self);
         if result.is_err(){
-            println!("VM error");
-            return Err(NeutronError::UnrecoverableFailure);
-        }else{
-            //???
+            self.call_system.log_warning(&format!("Contract encountered an execution error: {:?}", result.unwrap_err()));
+            return Err(Recoverable(RecoverableError::ContractExecutionError));
         }
         vm.print_diagnostics();
         let return_code = vm.reg32(Reg32::EAX);
         if return_code != 0 {
             //if contract signaled error (but didn't actually crash/fail) then exit
-            return Err(NeutronError::RecoverableFailure);
+            return Err(Recoverable(RecoverableError::ContractSignaledError));
         }
         let r = NeutronVMResult{
             gas_used: self.call_stack.current_context().gas_limit.saturating_sub(vm.gas_remaining),
@@ -290,7 +292,7 @@ impl<'a> X86Interface<'a> {
                 let size = vm.reg32(Reg32::ECX);
                 let memory = vm.copy_from_memory(address, size);
                 if memory.is_err(){
-                    return Err(NeutronError::RecoverableFailure);
+                    return Err(Recoverable(RecoverableError::ErrorCopyingFromVM));
                 }
                 let memory = memory.unwrap();
                 self.call_stack.push_sccs(memory)?;
@@ -302,7 +304,7 @@ impl<'a> X86Interface<'a> {
                 if address != 0 && max_size != 0{
                     let result = vm.copy_into_memory(address, &memory[0..max_size]);
                     if result.is_err(){
-                        return Err(NeutronError::RecoverableFailure);
+                        return Err(Recoverable(RecoverableError::ErrorCopyingIntoVM));
                     }
                 }
                 vm.set_reg32(Reg32::EAX, memory.len() as u32); //set EAX to actual_size
@@ -315,7 +317,7 @@ impl<'a> X86Interface<'a> {
                 if address != 0 && max_size != 0{
                     let result = vm.copy_into_memory(address, &memory[0..max_size]);
                     if result.is_err(){
-                        return Err(NeutronError::RecoverableFailure);
+                        return Err(Recoverable(RecoverableError::ErrorCopyingIntoVM));
                     }
                 }
                 vm.set_reg32(Reg32::EAX, memory.len() as u32); //set EAX to actual_size
@@ -331,11 +333,16 @@ impl<'a> X86Interface<'a> {
                 return Ok(());
             },
             Err(e) => {
-                if e == NeutronError::UnrecoverableFailure{
-                    return Err(VMError::SyscallError);
-                }else{
-                    vm.set_reg32(Reg32::EAX, 0xF0000000); //need a proper error code?
-                    return Ok(());
+                match e{
+                    Unrecoverable(x) => {
+                        self.call_system.log_warning(&format!("Unrecoverable hypervisor error: {:?}", x));
+                        return Err(VMError::SyscallError);
+                    },
+                    Recoverable(x) => {
+                        self.call_system.log_debug(&format!("Recoverable hypervisor error: {:?}", x));
+                        vm.set_reg32(Reg32::EAX, x as u32);
+                        return Ok(());
+                    }
                 }
             }
         }
@@ -362,12 +369,16 @@ impl <'a> Hypervisor for X86Interface<'a> {
             //how to handle unrecoverable??
             match result{
                 Err(e) => {
-                    if e == NeutronError::UnrecoverableFailure{
-                        return Err(VMError::SyscallError);
-                    }else{
-                        //use generic error
-                        vm.set_reg32(Reg32::EAX, 0xFFFF_FFFF);
-                        return Ok(());
+                    match e{
+                        Unrecoverable(x) => {
+                            self.call_system.log_warning(&format!("Unrecoverable system call error: {:?}", x));
+                            return Err(VMError::SyscallError);
+                        },
+                        Recoverable(x) => {
+                            self.call_system.log_debug(&format!("Recoverable system call error: {:?}", x));
+                            vm.set_reg32(Reg32::EAX, x as u32);
+                            return Ok(());
+                        }
                     }
                 },
                 Ok(v) => {
@@ -377,7 +388,8 @@ impl <'a> Hypervisor for X86Interface<'a> {
             }
         }
         if num != 0{
-            self.call_system.log_error("Invalid interrupt triggered");
+            self.call_system.log_warning("Invalid interrupt triggered");
+            vm.set_reg32(Reg32::EAX, RecoverableError::InvalidHypervisorInterrupt as u32);
             return Ok(());
         }
         Ok(())
@@ -390,18 +402,18 @@ mod tests {
     struct DummyCallSystem{}
     impl CallSystem for DummyCallSystem{
         fn system_call(&mut self, _stack: &mut ContractCallStack, _feature: u32, _function: u32) -> Result<u32, NeutronError>{
-            Err(NeutronError::UnrecoverableFailure)
+            Err(Unrecoverable(UnrecoverableError::NotImplemented))
         }
         fn block_height(&self) -> Result<u32, NeutronError>{
-            Err(NeutronError::UnrecoverableFailure)
+            Err(Unrecoverable(UnrecoverableError::NotImplemented))
         }
         fn read_state_key(&mut self, _stack: &mut ContractCallStack, _space: u8, _key: &[u8]) -> Result<Vec<u8>, NeutronError>{
-            Err(NeutronError::UnrecoverableFailure)
+            Err(Unrecoverable(UnrecoverableError::NotImplemented))
         }
         /// Write a state key to the database using the permanent storage feature set
         /// Used for writing bytecode etc by VMs
         fn write_state_key(&mut self, _stack: &mut ContractCallStack, _space: u8, _key: &[u8], _value: &[u8]) -> Result<(), NeutronError>{
-            Err(NeutronError::UnrecoverableFailure)
+            Err(Unrecoverable(UnrecoverableError::NotImplemented))
         }
     }
     #[test]

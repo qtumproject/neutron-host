@@ -1,5 +1,8 @@
 use crate::interface::*;
 use crate::addressing::*;
+use crate::neutronerror::*;
+use crate::neutronerror::NeutronError::*;
+
 
 /// The primary call stack which is used for almost all communication purposes between the system call layer and VMs
 /// It contains context information for the current smart contracts being executed and a shared general purpose stack
@@ -14,7 +17,7 @@ impl ContractCallStack{
 	/// Pushes an item to the Smart Contract Communication Stack
 	pub fn push_sccs(&mut self, data: &[u8]) -> Result<(), NeutronError>{
         if data.len() > 0xFFFF{
-            return Err(NeutronError::RecoverableFailure);
+            return Err(Recoverable(RecoverableError::StackItemTooLarge));
         }
         self.data_stack.push(data.to_vec());
         Ok(())
@@ -23,7 +26,7 @@ impl ContractCallStack{
 	pub fn pop_sccs(&mut self) -> Result<Vec<u8>, NeutronError>{
         match self.data_stack.pop(){
             None => {
-                return Err(NeutronError::RecoverableFailure);
+                return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
             },
             Some(v) => {
                 return Ok(v);
@@ -33,7 +36,7 @@ impl ContractCallStack{
     /// Pops an item off of the Smart Contract Communication Stack
 	pub fn drop_sccs(&mut self) -> Result<(), NeutronError>{
         if self.data_stack.len() == 0{
-            return Err(NeutronError::RecoverableFailure);
+            return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
         }
         self.data_stack.pop();
         Ok(())
@@ -42,11 +45,11 @@ impl ContractCallStack{
 	pub fn peek_sccs(&self, index: u32) -> Result<Vec<u8>, NeutronError>{
         let i = (self.data_stack.len() as isize - 1) - index as isize;
         if i < 0{
-            return Err(NeutronError::RecoverableFailure);
+            return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
         }
         match self.data_stack.get(i as usize){
             None => {
-                return Err(NeutronError::RecoverableFailure);
+                return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
             },
             Some(v) => {
                 return Ok(v.to_vec());
@@ -70,7 +73,7 @@ impl ContractCallStack{
     pub fn sccs_item_count(&self) -> Result<u32, NeutronError>{
         Ok(self.data_stack.len() as u32)
     }
-    
+
     /// Get total memory occupied by the SCCS
     /*
     pub fn sccs_memory_amount(&self) -> Result<u32, NeutronError>{
@@ -87,7 +90,7 @@ impl ContractCallStack{
     pub fn pop_context(&mut self) -> Result<ExecutionContext, NeutronError>{
         match self.context_stack.pop(){
             None => {
-                return Err(NeutronError::RecoverableFailure);
+                return Err(Unrecoverable(UnrecoverableError::ContextIndexEmpty));
             },
             Some(v) => {
                 return Ok(v);
@@ -98,11 +101,11 @@ impl ContractCallStack{
     pub fn peek_context(&self, index: usize) -> Result<&ExecutionContext, NeutronError>{
         let i = (self.context_stack.len() as isize - 1) - index as isize;
         if i < 0{
-            return Err(NeutronError::RecoverableFailure);
+            return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
         }
         match self.context_stack.get(i as usize){
             None => {
-                return Err(NeutronError::RecoverableFailure);
+                return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
             },
             Some(v) => {
                 return Ok(v);

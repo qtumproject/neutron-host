@@ -1,7 +1,6 @@
-use crate::interface::*;
 use crate::callstack::*;
-
-
+use crate::neutronerror::*;
+use crate::neutronerror::NeutronError::*;
 /*
 ## Global Storage
 
@@ -31,7 +30,7 @@ pub trait GlobalStorage{
         }
         let f = num::FromPrimitive::from_u32(function);
         if f.is_none(){
-            return Err(NeutronError::RecoverableFailure);
+            return Err(Recoverable(RecoverableError::InvalidSystemFunction));
         }
         let f=f.unwrap();
         let result = match f{
