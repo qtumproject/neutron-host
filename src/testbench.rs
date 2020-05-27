@@ -12,15 +12,15 @@ use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
 
 
-//later rename to Testbench?
+/// The Testbench is a virtual environment which can be used for testing smart contracts 
 #[derive(Default)]
-pub struct TestbenchCallSystem{
+pub struct Testbench{
     pub transaction: TransactionContext,
     pub db: ProtoDB
     //etc...
 }
 
-impl storage::GlobalStorage for TestbenchCallSystem{
+impl storage::GlobalStorage for Testbench{
     fn store_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
         let key = stack.pop_sccs()?;
         let value = stack.pop_sccs()?;
@@ -37,7 +37,7 @@ impl storage::GlobalStorage for TestbenchCallSystem{
     }
 }
 
-impl CallSystem for TestbenchCallSystem{
+impl CallSystem for Testbench{
     fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>{
         //go through each interface implementations until one returns true or an error occurs
         if (self as &mut dyn storage::GlobalStorage).try_syscall(stack, feature, function)? == true{
@@ -79,7 +79,8 @@ impl CallSystem for TestbenchCallSystem{
     }
 }
 
-impl TestbenchCallSystem{
+impl Testbench{
+    /// Begins execution using the top context within the stack
     pub fn execute_top_context(&mut self, stack: &mut ContractCallStack) -> Result<NeutronVMResult, NeutronError>{
         self.db.checkpoint().unwrap();
         if stack.current_context().self_address.version == 2 {
@@ -104,6 +105,7 @@ impl TestbenchCallSystem{
         }
     }
     
+    /// Deploy a smart contract from an ELF executable file
     pub fn deploy_from_elf(&mut self, stack: &mut ContractCallStack, file: String) -> Result<NeutronVMResult, NeutronError>{
         assert!(stack.context_count()? == 1, "Exactly one context should be pushed to the ContractCallStack");
         let path = PathBuf::from(file);
