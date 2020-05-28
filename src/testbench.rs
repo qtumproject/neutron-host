@@ -10,7 +10,7 @@ use crate::interface::*;
 use crate::callstack::*;
 use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
-
+use crate::syscall_interfaces::logging;
 
 /// The Testbench is a virtual environment which can be used for testing smart contracts 
 #[derive(Default)]
@@ -36,11 +36,40 @@ impl storage::GlobalStorage for Testbench{
         Err(Unrecoverable(UnrecoverableError::NotImplemented))
     }
 }
+impl logging::LoggingInterface for Testbench{
+    fn log_debug(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
+        let msg = stack.pop_sccs()?;
+        let string = std::string::String::from_utf8_lossy(&msg);
+        (self as &mut dyn CallSystem).log_debug(&string);
+        Ok(())
+    }
+    fn log_info(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
+        let msg = stack.pop_sccs()?;
+        let string = std::string::String::from_utf8_lossy(&msg);
+        (self as &mut dyn CallSystem).log_info(&string);
+        Ok(())
+    }
+    fn log_warning(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
+        let msg = stack.pop_sccs()?;
+        let string = std::string::String::from_utf8_lossy(&msg);
+        (self as &mut dyn CallSystem).log_warning(&string);
+        Ok(())
+    }
+    fn log_error(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
+        let msg = stack.pop_sccs()?;
+        let string = std::string::String::from_utf8_lossy(&msg);
+        (self as &mut dyn CallSystem).log_error(&string);
+        Ok(())
+    }
+}
 
 impl CallSystem for Testbench{
     fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>{
         //go through each interface implementations until one returns true or an error occurs
         if (self as &mut dyn storage::GlobalStorage).try_syscall(stack, feature, function)? == true{
+            return Ok(0);
+        }
+        if (self as &mut dyn logging::LoggingInterface).try_syscall(stack, feature, function)? == true{
             return Ok(0);
         }
 
