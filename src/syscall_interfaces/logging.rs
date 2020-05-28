@@ -8,10 +8,16 @@ ID: 2
 
 Functions:
 
-* log_debug(string)
-* log_info(string)
-* log_warning(string)
-* log_error(string)
+* log_debug(count, string, ...)
+* log_info(count, string, ...)
+* log_warning(count, string, ...)
+* log_error(count, string, ...)
+
+The exact order of printing messages is backward from what would be expected!
+This is designed so that no allocator is required for doing `println!` functions within neutron-star.
+
+The expense of reordering the strings etc is a cost on the CallSystem. This could potentially be somewhat expensive, 
+but since logging is informative only and can easily be a no-op (other than needing to pop off appropriate number of stack items) this incurs no real risk.
 
 Note in neutron-star, log_info is used by default for println!
 */

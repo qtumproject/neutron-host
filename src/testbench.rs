@@ -36,29 +36,48 @@ impl storage::GlobalStorage for Testbench{
         Err(Unrecoverable(UnrecoverableError::NotImplemented))
     }
 }
+impl Testbench{
+    fn compile_log_message(&mut self, stack: &mut ContractCallStack) -> Result<String, NeutronError>{
+        let count = stack.pop_sccs()?;
+        if count.len() < 1{
+            return Err(NeutronError::Recoverable(RecoverableError::StackItemTooSmall));
+        }
+        if count.len() > 1 {
+            return Err(Recoverable(RecoverableError::StackItemTooLarge));
+        }
+        let count = count.get(0).unwrap();
+        let mut messages:Vec<String> = vec![];
+        for i in 0..*count{
+            let s = stack.pop_sccs()?;
+            let string = std::string::String::from_utf8_lossy(&s);
+            messages.push(string.to_owned().to_string());
+        }
+        let mut string = String::default();
+        for msg in messages.iter().rev(){
+            string.push_str(&msg);
+        }
+        Ok(string)
+    }
+}
 impl logging::LoggingInterface for Testbench{
     fn log_debug(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        let msg = stack.pop_sccs()?;
-        let string = std::string::String::from_utf8_lossy(&msg);
-        (self as &mut dyn CallSystem).log_debug(&string);
+        let msg = self.compile_log_message(stack)?;
+        (self as &mut dyn CallSystem).log_debug(&msg);
         Ok(())
     }
     fn log_info(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        let msg = stack.pop_sccs()?;
-        let string = std::string::String::from_utf8_lossy(&msg);
-        (self as &mut dyn CallSystem).log_info(&string);
+        let msg = self.compile_log_message(stack)?;
+        (self as &mut dyn CallSystem).log_info(&msg);
         Ok(())
     }
     fn log_warning(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        let msg = stack.pop_sccs()?;
-        let string = std::string::String::from_utf8_lossy(&msg);
-        (self as &mut dyn CallSystem).log_warning(&string);
+        let msg = self.compile_log_message(stack)?;
+        (self as &mut dyn CallSystem).log_warning(&msg);
         Ok(())
     }
     fn log_error(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>{
-        let msg = stack.pop_sccs()?;
-        let string = std::string::String::from_utf8_lossy(&msg);
-        (self as &mut dyn CallSystem).log_error(&string);
+        let msg = self.compile_log_message(stack)?;
+        (self as &mut dyn CallSystem).log_error(&msg);
         Ok(())
     }
 }

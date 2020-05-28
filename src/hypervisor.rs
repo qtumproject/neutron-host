@@ -296,6 +296,7 @@ impl<'a> X86Interface<'a> {
                 }
                 let memory = memory.unwrap();
                 self.call_stack.push_sccs(memory)?;
+                vm.set_reg32(Reg32::EAX, 0);
             },
             StackInterrupt::Pop => {
                 let memory = self.call_stack.pop_sccs()?;
