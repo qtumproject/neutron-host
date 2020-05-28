@@ -133,7 +133,6 @@ impl Testbench{
         self.db.checkpoint().unwrap();
         if stack.current_context().self_address.version == 2 {
             let mut vm = X86Interface::new(self, stack);
-            println!("Executing x86 VM");
             match vm.execute(){
                 Err(e) => {
                     self.db.clear_checkpoints();
@@ -141,7 +140,6 @@ impl Testbench{
                 },
                 Ok(v) => {
                     if self.db.commit().is_err(){
-                        println!("database error with commit");
                         self.db.clear_checkpoints();
                         return Err(Unrecoverable(UnrecoverableError::DatabaseCommitError));
                     }

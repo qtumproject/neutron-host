@@ -136,21 +136,17 @@ impl<'a> X86Interface<'a> {
     
     fn deploy(&mut self) -> Result<NeutronVMResult, NeutronError>{
         let mut vm = VM::default();
-        println!("starting x86");
         if self.init_cpu(&mut vm).is_err(){
             return Err(Unrecoverable(UnrecoverableError::ErrorInitializingVM));
         }
-        println!("x86 initialized");
         self.create_contract_from_sccs(&mut vm)?;
         let result = vm.execute(self);
         if result.is_err(){
             vm.print_diagnostics();
             self.call_system.log_warning(&format!("Contract encountered an execution error: {:?}", result.unwrap_err()));
+            vm.print_diagnostics();
             return Err(Recoverable(RecoverableError::ContractExecutionError));
-        }else{
-            //???
         }
-        vm.print_diagnostics();
         let return_code = vm.reg32(Reg32::EAX);
         if return_code != 0 {
             //if contract signaled error (but didn't actually crash/fail) then exit
@@ -169,18 +165,16 @@ impl<'a> X86Interface<'a> {
 
     fn call(&mut self) -> Result<NeutronVMResult, NeutronError>{
         let mut vm = VM::default();
-        println!("starting x86 call");
         if self.init_cpu(&mut vm).is_err(){
             return Err(Unrecoverable(UnrecoverableError::ErrorInitializingVM));
         }
-        println!("x86 initialized");
         self.call_contract_from_sccs(&mut vm)?;
         let result = vm.execute(self);
         if result.is_err(){
             self.call_system.log_warning(&format!("Contract encountered an execution error: {:?}", result.unwrap_err()));
+            vm.print_diagnostics();
             return Err(Recoverable(RecoverableError::ContractExecutionError));
         }
-        vm.print_diagnostics();
         let return_code = vm.reg32(Reg32::EAX);
         if return_code != 0 {
             //if contract signaled error (but didn't actually crash/fail) then exit
@@ -388,8 +382,12 @@ impl <'a> Hypervisor for X86Interface<'a> {
                 }
             }
         }
+        if num == ExecInfoInterrupt::ExecutionType as u8{
+            vm.set_reg32(Reg32::EAX, self.call_stack.current_context().execution_type as u32);
+            return Ok(());
+        }
         if num != 0{
-            self.call_system.log_warning("Invalid interrupt triggered");
+            self.call_system.log_warning(&format!("Invalid interrupt triggered: {:?}", num));
             vm.set_reg32(Reg32::EAX, RecoverableError::InvalidHypervisorInterrupt as u32);
             return Ok(());
         }

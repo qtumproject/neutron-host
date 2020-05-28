@@ -20,9 +20,9 @@ pub struct NeutronVMResult{
     pub extra_data: u64
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExecutionType{
-    Call,
+    Call = 0,
     Deploy,
     BareExecution
 }
@@ -154,7 +154,7 @@ pub trait CallSystem{
         println!("Info: {}", msg);
     }
     fn log_debug(&self, msg: &str){
-        println!("Debug Message: {}", msg);
+        println!("Debug: {}", msg);
     }
 }
 
