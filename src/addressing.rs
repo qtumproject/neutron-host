@@ -29,7 +29,12 @@ impl NeutronAddress{
         }
 	}
 	
-	pub fn generate_random_address(&mut self) {
+	pub fn set_to_random_address(&mut self) {
 		self.data = rand::thread_rng().gen::<[u8; 32]>().to_vec();
-	}
+    }
+    pub fn new_random_address() -> NeutronAddress{
+        let mut a = NeutronAddress::default();
+        a.set_to_random_address();
+        a
+    }
 }

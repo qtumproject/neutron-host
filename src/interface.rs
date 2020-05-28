@@ -1,11 +1,9 @@
-extern crate neutron_star_constants;
-extern crate ring;
 extern crate struct_deser;
-#[macro_use]
 use struct_deser_derive::*;
-use neutron_star_constants::*;
 use crate::addressing::*;
-use qx86::vm::*;
+use crate::callstack::*;
+use crate::neutronerror::*;
+
 
 /// The result of a smart contract execution
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -22,27 +20,23 @@ pub struct NeutronVMResult{
     pub extra_data: u64
 }
 
-/// The context under which a smart contract is being executed
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct NeutronContext{
-	/// The execution context, containing info specific to this exact execution
-	pub exec: ExecContext,
-	/// The transaction context, containing info specific to the transaction within which this execution has occurred
-	pub tx: TransactionContext,
-	/// The block context, containing info specific to the entire block into which this execution is taking place
-	pub block: BlockContext,
-    /// The amount of gas remaining for the current smart contract execution
-    /// This is updated implicitly by calls to NeutronAPI functions and is expected to be updated by the VM for computation requests 
-    pub gas: u64,
-    /// An internal undefined field which can be used to store a pointer.
-    pub internal: usize
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExecutionType{
+    Call = 0,
+    Deploy,
+    BareExecution
 }
 
+impl Default for ExecutionType{
+    fn default() -> ExecutionType{
+        ExecutionType::Call
+    }
+}
 
 /// The execution context of the current smart contract
 /// Multiple ExecContext structs are expected, a new one for each smart contract call performed. 
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct ExecContext{
+pub struct ExecutionContext{
 	/// TBD
 	pub flags: u64,
     /// The address which caused this execution to occur.
@@ -56,23 +50,14 @@ pub struct ExecContext{
     /// This is the sender of the transaction which caused this execution.
 	pub origin: NeutronAddress,
 	/// The current address of the executing smart contract
-	pub self_address: NeutronAddress,
-	/// The total call stack depth of the smart contract executions. 
-    /// This is 0 when executed from the transaction and increases by one with each smart contract call and decreases by one with each end of smart contract execution
-    pub nest_level: u32
+    pub self_address: NeutronAddress,
+    pub execution_type: ExecutionType,
 }
 
-impl ExecContext{
-	/// ???
-    pub fn to_neutron(&self) -> NeutronExecContext{
-        let mut c = NeutronExecContext::default();
-        c.flags = self.flags;
-        c.gas_limit = self.gas_limit;
-        c.nest_level = self.nest_level;
-        c.value_sent = self.value_sent;
-        c
-    }
+impl ExecutionContext{
 }
+
+
 
 /// The transaction information in which the current contract execution is located
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -116,17 +101,7 @@ pub struct BlockContext{
 	pub previous_hashes: Vec<[u8; 32]>
 }
 
-/// The primary error structure of NeutronAPI calls
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum NeutronError{
-	/// Success, no error has occured
-	Success,
-	/// An error has occured, but if the VM implements an error handling system, it is appropriate to allow this error
-    /// to be handled by the smart contract and for execution to continue
-	RecoverableFailure,
-    /// An error has occured and the VM should immediately terminate, not allowing the smart contract to detect or handle this error in any capacity
-    UnrecoverableFailure
-}
+
 
 /*
 typedef struct{
@@ -149,37 +124,43 @@ pub struct NeutronVersion{
 }
 
 
-/// This is the primary call system  interface. It is loosely based on the C Neutron API, but uses Rust paradigms and features
-/// This will require a heavier translation layer, but makes Rust usage significantly simpler
-pub trait CallSystem{
-	/// Retrieves the context information of the current smart contract execution
-	fn get_context(&self) -> &NeutronContext;
-	/// Pushes an item to the Smart Contract Communication Stack
-	fn push_sccs(&mut self, vm: &mut VM, data: &Vec<u8>) -> Result<(), NeutronError>;
-    /// Pops an item off of the Smart Contract Communication Stack
-	fn pop_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>;
-	/// Drops an item from the Smart Contract Communication Stack, popping it and doing nothing with the data
-	fn pop_sccs_toss(&mut self, vm: &mut VM) -> Result<(), NeutronError>; //returns no data, for throwing away the item
-	/// Retrieves the top item on the Smart Contract Communication Stack without removing it
-	fn peek_sccs(&mut self, vm: &mut VM) -> Result<(), NeutronError>;
-	/// Checks the size of the top item on the Smart Contract Communication Stack
-    //fn peek_sccs_size(&mut self) -> Result<usize, NeutronError>;
-    /// Swaps the top item of the SCCS with the item of the desired index
-    fn sccs_swap(&mut self, vm: &mut VM) -> Result<(), NeutronError>;
-    /// Replicates the desired item of the stack onto the top of the stack
-    fn sccs_dup(&mut self, vm: &mut VM) -> Result<(), NeutronError>;
-    /// Gets number of items in the sccs
-    fn sccs_item_count(self, vm: &mut VM) -> Result<(), NeutronError>;
+
+
+
+pub trait VMInterface{
+    fn execute(&mut self) -> Result<NeutronVMResult, NeutronError>;
 }
 
+pub trait CallSystem{
+    /// General system call interface
+    fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>;
+    /// Get the current block height at execution
+    /// Used to switch VM behavior in blockchain forks
+    fn block_height(&self) -> Result<u32, NeutronError>;
+    /// Read a state key from the database using the permanent storage feature set
+    /// Used for reading core contract bytecode by VMs
+    fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>;
+    /// Write a state key to the database using the permanent storage feature set
+    /// Used for writing bytecode etc by VMs
+    fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn log_error(&self, msg: &str){
+        println!("Error: {}", msg);
+    }
+    fn log_warning(&self, msg: &str){
+        println!("Warning: {}", msg);
+    }
+    fn log_info(&self, msg: &str){
+        println!("Info: {}", msg);
+    }
+    fn log_debug(&self, msg: &str){
+        println!("Debug: {}", msg);
     }
 }
+
+
+
+
  
     /*
     leftovers from NeutronAPI that need to be implemented in system contracts
