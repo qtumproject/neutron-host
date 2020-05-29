@@ -1,0 +1,11 @@
+name="MyContract"
+implements=["ERC20", "QRC30"]
+[[function]]
+name="my_func"
+inputs= [{name="x", type="uint8"},{name="y",type="string"}]
+outputs=[{name="z", type="uint32"}]
+[[function]]
+name="empty_func"
+inputs=[]
+outputs=[]
+
