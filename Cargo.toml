@@ -10,7 +10,9 @@ edition = "2018"
 members = [
 	"./", 
 	"neutron-testbench", 
-	"neutron-abi"
+	"neutron-abi",
+	"neutron-abi/test-abi-contract",
+	"neutron-abi/neutronify"
 ]
 
 [dependencies]

@@ -1,0 +1,15 @@
+[package]
+name = "neutronify"
+version = "0.1.0"
+authors = ["VoR0220 <catalanor0220@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = {version = "1.0.30", features =["full"]}
+proc-macro2 = "1.0"
+#neutron-star = { git = "https://github.com/qtumproject/neutron-star", branch = "master"}
