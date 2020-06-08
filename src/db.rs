@@ -43,21 +43,28 @@ impl NeutronDB for ProtoDB{
             match checkpoint.get(address){
                 Some(kv) => {
                     match kv.get(key){
-                        Some(v) => {return Ok(v.to_vec());},
+                        Some(v) => {
+                            return Ok(v.to_vec());
+                        },
                         None => {}
                     }
                 },
-                None => {}
+                None => {
+                }
             }
         }
         match self.storage.get(address){
             Some(kv) => {
                 match kv.get(key){
-                    Some(v) => {return Ok(v.to_vec());},
-                    None => {}
+                    Some(v) => {
+                        return Ok(v.to_vec());
+                    },
+                    None => {
+                    }
                 }
             },
-            None => {}
+            None => {
+            }
         }
         Err(NeutronDBError::Unrecoverable)
     }
@@ -104,7 +111,16 @@ impl NeutronDB for ProtoDB{
     fn commit(&mut self) -> Result<(), NeutronDBError>{
         self.collapse_checkpoints()?;
         for (key, value) in self.checkpoints.last_mut().unwrap().drain(){
-            self.storage.insert(key, value);
+            match self.storage.get_mut(&key){
+                None => {
+                    self.storage.insert(key, value);
+                },
+                Some(kv) => {
+                    for(k2, v2) in value{
+                        kv.insert(k2, v2);
+                    }
+                }
+            }
         }
         self.clear_checkpoints();
         Ok(())
@@ -154,8 +170,39 @@ mod tests {
         assert!(db.write_key(&a, &[1], &[8, 8, 8, 8]).is_ok());
         assert!(db.commit().is_ok());
         assert!(db.revert_checkpoint().is_err());
+        db.clear_checkpoints();
         let v = db.read_key(&a, &[1]).unwrap();
         assert!(v == vec![8, 8, 8, 8]);
+        db.clear_checkpoints();
+        assert!(db.checkpoint().is_ok());
+        assert!(db.write_key(&a, &[1, 2, 3], &[9, 9, 9, 9]).is_ok());
+        assert!(db.commit().is_ok());
+        assert!(db.revert_checkpoint().is_err());
+        assert!(db.checkpoint().is_ok());
+        let v = db.read_key(&a, &[1, 2, 3]).unwrap();
+        assert!(v == vec![9, 9, 9, 9]);
+    }
+    #[test]
+    fn replicate_checkpoint_bug(){
+        let mut a = NeutronShortAddress::default();
+        a.version=100;
+        a.data[5] = 20;
+        let mut db = ProtoDB::default(); 
+        //deploy
+        assert!(db.checkpoint().is_ok());
+        assert!(db.write_key(&a, &[2, 1, 0], &[10]).is_ok());
+        assert!(db.commit().is_ok());
+        //first call
+        assert!(db.checkpoint().is_ok());
+        let v = db.read_key(&a, &[2, 1, 0]).unwrap();
+        assert!(v == vec![10]);
+        db.write_key(&a, &[95, 0, 1, 2, 3], &[10, 20, 30, 40]);
+        db.commit().unwrap();
+        //second call
+        db.checkpoint().unwrap();
+        let v = db.read_key(&a, &[2, 1, 0]).unwrap();
+        assert!(v == vec![10]);
+        
     }
     
 }
