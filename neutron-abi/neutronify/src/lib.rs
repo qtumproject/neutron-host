@@ -4,7 +4,7 @@ use syn::{parse_macro_input, ItemFn};
 //use neutron_star::syscalls::*;
 
 #[proc_macro_attribute]
-pub fn neutronify(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn my_macro(attr: proc_macro::TokenStream, item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     //println!("attr: \"{}\"", _attr.to_string());
     //let item = proc_macro2::TokenStream::from(input);
     println!("item: \"{}\"", item.to_string());
