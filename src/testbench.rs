@@ -47,7 +47,7 @@ impl Testbench{
         }
         let count = count.get(0).unwrap();
         let mut messages:Vec<String> = vec![];
-        for i in 0..*count{
+        for _ in 0..*count{
             let s = stack.pop_sccs()?;
             let string = std::string::String::from_utf8_lossy(&s);
             messages.push(string.to_owned().to_string());

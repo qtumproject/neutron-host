@@ -10,10 +10,22 @@ use crate::neutronerror::NeutronError::*;
 #[derive(Default)]
 pub struct ContractCallStack{
     data_stack: Vec<Vec<u8>>,
-    context_stack: Vec<ExecutionContext>
+    context_stack: Vec<ExecutionContext>,
+    /// Note these fields are primary used for communication between the CallSystem, Hypervisor, and VM. 
+    pub pending_gas: i64,
+    /// Note these fields are primary used for communication between the CallSystem, Hypervisor, and VM. 
+    pub gas_remaining: u64
 }
 
 impl ContractCallStack{
+    /// Adds to the current amount of gas consumed by the system call, and returns a recoverable error if there is not enough gas to satisfy it
+    pub fn charge_gas(&mut self, amount: i64) -> Result<(), NeutronError>{
+        self.pending_gas += amount;
+        if self.pending_gas > self.gas_remaining as i64{
+            return Err(NeutronError::Recoverable(RecoverableError::OutOfGas));
+        }
+        Ok(())
+    }
 	/// Pushes an item to the Smart Contract Communication Stack
 	pub fn push_sccs(&mut self, data: &[u8]) -> Result<(), NeutronError>{
         if data.len() > 0xFFFF{

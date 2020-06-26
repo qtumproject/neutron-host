@@ -196,7 +196,7 @@ mod tests {
         assert!(db.checkpoint().is_ok());
         let v = db.read_key(&a, &[2, 1, 0]).unwrap();
         assert!(v == vec![10]);
-        db.write_key(&a, &[95, 0, 1, 2, 3], &[10, 20, 30, 40]);
+        db.write_key(&a, &[95, 0, 1, 2, 3], &[10, 20, 30, 40]).unwrap();
         db.commit().unwrap();
         //second call
         db.checkpoint().unwrap();

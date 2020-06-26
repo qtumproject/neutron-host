@@ -326,28 +326,41 @@ impl<'a> X86Interface<'a> {
     fn translate_interrupt_result(&mut self, vm: &mut VM, result: Result<(), NeutronError>) -> Result<(), VMError>{
         match result{
             Ok(_) => {
+                self.sync_gas(vm);
                 return Ok(());
             },
             Err(e) => {
                 match e{
                     Unrecoverable(x) => {
                         self.call_system.log_warning(&format!("Unrecoverable hypervisor error: {:?}", x));
+                        self.sync_gas(vm);
                         return Err(VMError::SyscallError);
                     },
                     Recoverable(x) => {
+                        if x == RecoverableError::OutOfGas{
+                            vm.gas_remaining = 0;
+                            return Err(VMError::OutOfGas);
+                        }
                         self.call_system.log_debug(&format!("Recoverable hypervisor error: {:?}", x));
                         vm.set_reg32(Reg32::EAX, x as u32);
+                        self.sync_gas(vm);
                         return Ok(());
                     }
                 }
             }
         }
     }
+    fn sync_gas(&mut self, vm: &mut VM){
+        vm.gas_remaining = (vm.gas_remaining as i64 - self.call_stack.pending_gas) as u64;
+        self.call_stack.pending_gas = 0;
+        self.call_stack.gas_remaining = 0;
+    }
 }
 
 impl <'a> Hypervisor for X86Interface<'a> {
     /// The primary interface into the hypervisor from the VM programs. This is triggered by using an `INT` opcode within the VM program
     fn interrupt(&mut self, vm: &mut VM, num: u8) -> Result<(), VMError>{
+        self.call_stack.gas_remaining = vm.gas_remaining;
         let call = num::FromPrimitive::from_u8(num);
         if call.is_some(){
             let result = self.stack_interrupt(vm, call.unwrap());
@@ -368,28 +381,38 @@ impl <'a> Hypervisor for X86Interface<'a> {
                     match e{
                         Unrecoverable(x) => {
                             self.call_system.log_warning(&format!("Unrecoverable system call error: {:?}", x));
+                            self.sync_gas(vm);
                             return Err(VMError::SyscallError);
                         },
                         Recoverable(x) => {
+                            if x == RecoverableError::OutOfGas{
+                                self.call_system.log_debug("Ran out of gas during system call execution");
+                                vm.gas_remaining = 0;
+                                return Err(VMError::OutOfGas);
+                            }
                             self.call_system.log_debug(&format!("Recoverable system call error: {:?}", x));
                             vm.set_reg32(Reg32::EAX, x as u32);
+                            self.sync_gas(vm);
                             return Ok(());
                         }
                     }
                 },
                 Ok(v) => {
                     vm.set_reg32(Reg32::EAX, v);
+                    self.sync_gas(vm);
                     return Ok(())
                 }
             }
         }
         if num == ExecInfoInterrupt::ExecutionType as u8{
             vm.set_reg32(Reg32::EAX, self.call_stack.current_context().execution_type as u32);
+            self.sync_gas(vm);
             return Ok(());
         }
         if num != 0{
             self.call_system.log_warning(&format!("Invalid interrupt triggered: {:?}", num));
             vm.set_reg32(Reg32::EAX, RecoverableError::InvalidHypervisorInterrupt as u32);
+            self.sync_gas(vm);
             return Ok(());
         }
         Ok(())
