@@ -1,10 +1,10 @@
 name="MyContract"
 implements=["ERC20", "QRC30"]
-[[function]]
+[[functions]]
 name="my_func"
 inputs= [{name="x", type="uint8"},{name="y",type="string"}]
 outputs=[{name="z", type="uint32"}]
-[[function]]
+[[functions]]
 name="empty_func"
 inputs=[]
 outputs=[]
