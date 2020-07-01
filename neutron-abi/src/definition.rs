@@ -42,7 +42,7 @@ const TEMPLATE_CODE: &str = r#"
         	let __id = pop_sccs_u32()?;
         	match __id {
 			{{#functions}}
-				functionid!("{{name}}({{#inputs}}{{/inputs}}){{#outputs}} -> {{r#type}}{{/outputs}}") => { 
+				functionid!("{{name}}({{#inputs}}{{r#type}}{{^last}},{{/last}}{{/inputs}}){{#outputs}}->{{r#type}}{{/outputs}}") => { 
 					{{pop_funcs_string}}
 					let result = self.{{name}}({{args_string}})?;
 					{{push_func_string}}
@@ -71,6 +71,11 @@ impl ContractDefinitions {
 				pop_funcs.push(format!("let __{} = {}?;", i, match_pop_funcs(ty.r#type.clone())).clone());
 				str_args.push(format!("__{}", i).clone());
 			}
+
+			if let Some(last) = func.inputs.last_mut() {
+    			last.last = true;
+			}
+
 			func.args_string = str_args.join(",");
 			func.pop_funcs_string = pop_funcs.join("\n");
 			let mut push_funcs: Vec<String> = Vec::new();
