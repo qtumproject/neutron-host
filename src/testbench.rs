@@ -12,6 +12,17 @@ use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
 use crate::syscall_interfaces::logging;
 
+
+
+pub struct TestbenchGasCharger{
+    //TODO, add serialize/deserialize somehow 
+
+}
+
+
+
+
+
 /// The Testbench is a virtual environment which can be used for testing smart contracts 
 #[derive(Default)]
 pub struct Testbench{
@@ -47,7 +58,7 @@ impl Testbench{
         }
         let count = count.get(0).unwrap();
         let mut messages:Vec<String> = vec![];
-        for i in 0..*count{
+        for _ in 0..*count{
             let s = stack.pop_sccs()?;
             let string = std::string::String::from_utf8_lossy(&s);
             messages.push(string.to_owned().to_string());
@@ -105,7 +116,7 @@ impl CallSystem for Testbench{
     fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
         let mut k = vec![space];
         k.extend_from_slice(key);
-        match self.db.read_key(&stack.current_context().self_address.to_short_address(), &k) {
+        match self.db.read_key(stack, &stack.current_context().self_address.to_short_address(), &k) {
             Err(_e) => {
                 Err(Unrecoverable(UnrecoverableError::StateOutOfRent))
             },
@@ -119,7 +130,7 @@ impl CallSystem for Testbench{
     fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>{
         let mut k = vec![space];
         k.extend_from_slice(key);
-        if self.db.write_key(&stack.current_context().self_address.to_short_address(), &k, value).is_err(){
+        if self.db.write_key(stack, &stack.current_context().self_address.to_short_address(), &k, value).is_err(){
             Err(Unrecoverable(UnrecoverableError::DatabaseWritingError))
         }else{
             Ok(())

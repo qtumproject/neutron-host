@@ -27,7 +27,8 @@ pub enum RecoverableError{
     ContractSignaledError,
     ContractExecutionError,
     InvalidHypervisorInterrupt,
-    StackItemTooSmall
+    StackItemTooSmall,
+    OutOfGas //not "technically" recoverable, but at least can be caught further up in the call stack
 
 }
 

@@ -1,24 +1,145 @@
+extern crate qx86;
+
 use crate::interface::*;
 use crate::addressing::*;
 use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
+use qx86::vm::*;
+use std::collections::HashMap;
 
+/// The gas schedule determines how operations should be incur gas charges. 
+pub trait GasSchedule{
+    /// The qx86 GasCharger to use
+    fn x86_gas_schedule(&self) -> GasCharger;
+    /// The gas cost of a particular feature and costid
+    fn gas_cost(&self, feature: u32, costid: u32) -> i64;
+}
+
+pub struct BlankSchedule{}
+impl GasSchedule for BlankSchedule{
+    fn x86_gas_schedule(&self) -> GasCharger{
+        GasCharger::test_schedule()
+    }
+    fn gas_cost(&self, _feature: u32, _costid: u32) -> i64{
+        0
+    }
+}
+
+pub struct TestbenchGasSchedule{
+    //TODO, add serialize/deserialize somehow 
+    pub gas_costs: HashMap<u64, i64>
+}
+impl TestbenchGasSchedule{
+    pub fn set_cost(&mut self, feature: u32, costid: u32, cost: i64){
+        let id = (feature as u64) << 32 | (costid as u64);
+        self.gas_costs.insert(id, cost);
+    }
+}
+
+impl GasSchedule for TestbenchGasSchedule{
+    fn x86_gas_schedule(&self) -> GasCharger{
+        //TODO
+        GasCharger::test_schedule()
+    }
+    fn gas_cost(&self, feature: u32, costid: u32) -> i64{
+        let id = (feature as u64) << 32 | (costid as u64);
+        match self.gas_costs.get(&id){
+            None => {
+                0
+            },
+            Some(v) => {
+                *v
+            }
+        }
+    }
+}
+
+pub const INTERNAL_BUILT_IN_FEATURE:u32 = 0;
+
+pub enum CallStackCost{
+    WriteByte = 1,
+    ReadByte,
+    ClearByteRefund,
+    CopyDataToVM, //not used here, but used in hypervisors
+    CopyDataFromVM
+}
+
+fn gas_cost(stack: &ContractCallStack, costid: CallStackCost) -> i64{
+    stack.gas_cost(INTERNAL_BUILT_IN_FEATURE, costid as u32)
+}
 
 /// The primary call stack which is used for almost all communication purposes between the system call layer and VMs
 /// It contains context information for the current smart contracts being executed and a shared general purpose stack
 /// All smart contract VMs should use this structure for all communication purposes with "the outside world"
-#[derive(Default)]
 pub struct ContractCallStack{
     data_stack: Vec<Vec<u8>>,
-    context_stack: Vec<ExecutionContext>
+    context_stack: Vec<ExecutionContext>,
+    /// Note these fields are primary used for communication between the CallSystem, Hypervisor, and VM. 
+    pub pending_gas: i64,
+    /// Note these fields are primary used for communication between the CallSystem, Hypervisor, and VM. 
+    pub gas_remaining: u64,
+    gas_schedule: Box<dyn GasSchedule>,
+    system_charges_enabled: bool
+}
+
+impl Default for ContractCallStack{
+    fn default() -> ContractCallStack{
+        ContractCallStack{
+            data_stack: Vec::default(),
+            context_stack: Vec::default(),
+            pending_gas: 0,
+            gas_remaining: 0,
+            gas_schedule: Box::from(BlankSchedule{}),
+            system_charges_enabled: true
+        }
+    }
 }
 
 impl ContractCallStack{
+    pub fn new_with_schedule(schedule: Box<dyn GasSchedule>) -> ContractCallStack{
+        ContractCallStack{
+            data_stack: Vec::default(),
+            context_stack: Vec::default(),
+            pending_gas: 0,
+            gas_remaining: 0,
+            gas_schedule: schedule,
+            system_charges_enabled: true
+        }
+    }
+    /// Disables system call gas charges. Useful for fixed-cost initialization procedures
+    pub fn disable_system_charges(&mut self){
+        self.system_charges_enabled = false;
+    }
+    /// Enables system call gas charges
+    pub fn enable_system_charges(&mut self){
+        self.system_charges_enabled = true;
+    }
+    /// The qx86 GasCharger to use for the gas schedule
+    pub fn x86_gas_charger(&self) -> GasCharger{
+        self.gas_schedule.x86_gas_schedule()
+    }
+    /// Gets the gas cost of a particular feature and costid
+    pub fn gas_cost(&self, feature: u32, costid: u32) -> i64{
+        if self.system_charges_enabled {
+            self.gas_schedule.gas_cost(feature, costid)
+        }else{
+            0
+        }
+    }
+    /// Adds to the current amount of gas consumed by the system call, and returns a recoverable error if there is not enough gas to satisfy it
+    pub fn charge_gas(&mut self, amount: i64) -> Result<(), NeutronError>{
+        self.pending_gas += amount;
+        if self.pending_gas > self.gas_remaining as i64{
+            return Err(NeutronError::Recoverable(RecoverableError::OutOfGas));
+        }
+        Ok(())
+    }
 	/// Pushes an item to the Smart Contract Communication Stack
 	pub fn push_sccs(&mut self, data: &[u8]) -> Result<(), NeutronError>{
         if data.len() > 0xFFFF{
             return Err(Recoverable(RecoverableError::StackItemTooLarge));
         }
+        self.charge_gas(gas_cost(self, CallStackCost::WriteByte) * data.len() as i64)?;
         self.data_stack.push(data.to_vec());
         Ok(())
     }
@@ -29,6 +150,9 @@ impl ContractCallStack{
                 return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
             },
             Some(v) => {
+                let cost = gas_cost(self, CallStackCost::ReadByte) * v.len() as i64
+                         - gas_cost(self, CallStackCost::ClearByteRefund) * v.len() as i64;
+                self.charge_gas(cost)?;
                 return Ok(v);
             }
         }
@@ -38,11 +162,13 @@ impl ContractCallStack{
         if self.data_stack.len() == 0{
             return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
         }
-        self.data_stack.pop();
+        let data = self.data_stack.pop().unwrap();
+        let cost = gas_cost(self, CallStackCost::ClearByteRefund) * data.len() as i64;
+        self.charge_gas(cost)?;
         Ok(())
     }
 	/// Retrieves the top item on the Smart Contract Communication Stack without removing it
-	pub fn peek_sccs(&self, index: u32) -> Result<Vec<u8>, NeutronError>{
+	pub fn peek_sccs(&mut self, index: u32) -> Result<Vec<u8>, NeutronError>{
         let i = (self.data_stack.len() as isize - 1) - index as isize;
         if i < 0{
             return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
@@ -52,7 +178,10 @@ impl ContractCallStack{
                 return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
             },
             Some(v) => {
-                return Ok(v.to_vec());
+                let data = v.to_vec();
+                let cost = gas_cost(self, CallStackCost::ReadByte) * data.len() as i64;
+                self.charge_gas(cost)?;
+                return Ok(data);
             }
         }
     }
