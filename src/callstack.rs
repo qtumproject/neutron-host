@@ -5,10 +5,13 @@ use crate::addressing::*;
 use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
 use qx86::vm::*;
+use std::collections::HashMap;
 
-
+/// The gas schedule determines how operations should be incur gas charges. 
 pub trait GasSchedule{
+    /// The qx86 GasCharger to use
     fn x86_gas_schedule(&self) -> GasCharger;
+    /// The gas cost of a particular feature and costid
     fn gas_cost(&self, feature: u32, costid: u32) -> i64;
 }
 
@@ -19,6 +22,35 @@ impl GasSchedule for BlankSchedule{
     }
     fn gas_cost(&self, _feature: u32, _costid: u32) -> i64{
         0
+    }
+}
+
+pub struct TestbenchGasSchedule{
+    //TODO, add serialize/deserialize somehow 
+    pub gas_costs: HashMap<u64, i64>
+}
+impl TestbenchGasSchedule{
+    pub fn set_cost(&mut self, feature: u32, costid: u32, cost: i64){
+        let id = (feature as u64) << 32 | (costid as u64);
+        self.gas_costs.insert(id, cost);
+    }
+}
+
+impl GasSchedule for TestbenchGasSchedule{
+    fn x86_gas_schedule(&self) -> GasCharger{
+        //TODO
+        GasCharger::test_schedule()
+    }
+    fn gas_cost(&self, feature: u32, costid: u32) -> i64{
+        let id = (feature as u64) << 32 | (costid as u64);
+        match self.gas_costs.get(&id){
+            None => {
+                0
+            },
+            Some(v) => {
+                *v
+            }
+        }
     }
 }
 
@@ -74,15 +106,19 @@ impl ContractCallStack{
             system_charges_enabled: true
         }
     }
+    /// Disables system call gas charges. Useful for fixed-cost initialization procedures
     pub fn disable_system_charges(&mut self){
         self.system_charges_enabled = false;
     }
+    /// Enables system call gas charges
     pub fn enable_system_charges(&mut self){
         self.system_charges_enabled = true;
     }
+    /// The qx86 GasCharger to use for the gas schedule
     pub fn x86_gas_charger(&self) -> GasCharger{
         self.gas_schedule.x86_gas_schedule()
     }
+    /// Gets the gas cost of a particular feature and costid
     pub fn gas_cost(&self, feature: u32, costid: u32) -> i64{
         if self.system_charges_enabled {
             self.gas_schedule.gas_cost(feature, costid)
