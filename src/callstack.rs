@@ -1,14 +1,22 @@
+extern crate qx86;
+
 use crate::interface::*;
 use crate::addressing::*;
 use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
+use qx86::vm::*;
+
 
 pub trait GasSchedule{
+    fn x86_gas_schedule(&self) -> GasCharger;
     fn gas_cost(&self, feature: u32, costid: u32) -> i64;
 }
 
 pub struct BlankSchedule{}
 impl GasSchedule for BlankSchedule{
+    fn x86_gas_schedule(&self) -> GasCharger{
+        GasCharger::test_schedule()
+    }
     fn gas_cost(&self, _feature: u32, _costid: u32) -> i64{
         0
     }
@@ -48,6 +56,9 @@ impl ContractCallStack{
             gas_remaining: 0,
             gas_schedule: schedule
         }
+    }
+    pub fn x86_gas_charger(&self) -> GasCharger{
+        self.gas_schedule.x86_gas_schedule()
     }
     pub fn gas_cost(&self, feature: u32, costid: u32) -> i64{
         self.gas_schedule.gas_cost(feature, costid)

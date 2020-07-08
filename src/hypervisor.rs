@@ -211,7 +211,7 @@ impl<'a> X86Interface<'a> {
     /// Will create a new instance of an x86 VM
     fn init_cpu(&mut self, vm: &mut VM) -> Result<(), VMError>{
         self.init_memory(vm)?;
-        vm.charger = GasCharger::test_schedule();
+        vm.charger = self.call_stack.x86_gas_charger();
         vm.gas_remaining = self.call_stack.current_context().gas_limit;
         vm.eip = 0x10000;
         Ok(())
