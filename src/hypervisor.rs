@@ -285,6 +285,7 @@ impl<'a> X86Interface<'a> {
             StackInterrupt::Push => {
                 let address = vm.reg32(Reg32::EAX);
                 let size = vm.reg32(Reg32::ECX);
+                self.call_stack.charge_gas(self.call_stack.gas_cost(INTERNAL_BUILT_IN_FEATURE, CallStackCost::CopyDataFromVM as u32) * size as i64)?;
                 let memory = vm.copy_from_memory(address, size);
                 if memory.is_err(){
                     return Err(Recoverable(RecoverableError::ErrorCopyingFromVM));
@@ -297,6 +298,7 @@ impl<'a> X86Interface<'a> {
                 let memory = self.call_stack.pop_sccs()?;
                 let address = vm.reg32(Reg32::EAX);
                 let max_size = cmp::min(vm.reg32(Reg32::ECX) as usize, memory.len());
+                self.call_stack.charge_gas(self.call_stack.gas_cost(INTERNAL_BUILT_IN_FEATURE, CallStackCost::CopyDataToVM as u32) * max_size as i64)?;
                 if address != 0 && max_size != 0{
                     let result = vm.copy_into_memory(address, &memory[0..max_size]);
                     if result.is_err(){
@@ -310,6 +312,7 @@ impl<'a> X86Interface<'a> {
                 let memory = self.call_stack.peek_sccs(index)?;
                 let address = vm.reg32(Reg32::EAX);
                 let max_size = cmp::min(vm.reg32(Reg32::ECX) as usize, memory.len());
+                self.call_stack.charge_gas(self.call_stack.gas_cost(INTERNAL_BUILT_IN_FEATURE, CallStackCost::CopyDataToVM as u32) * max_size as i64)?;
                 if address != 0 && max_size != 0{
                     let result = vm.copy_into_memory(address, &memory[0..max_size]);
                     if result.is_err(){

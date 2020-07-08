@@ -22,16 +22,18 @@ impl GasSchedule for BlankSchedule{
     }
 }
 
-pub const SCCS_BUILT_IN_FEATURE:u32 = 0;
+pub const INTERNAL_BUILT_IN_FEATURE:u32 = 0;
 
 pub enum CallStackCost{
     WriteByte = 1,
     ReadByte,
-    ClearByteRefund
+    ClearByteRefund,
+    CopyDataToVM, //not used here, but used in hypervisors
+    CopyDataFromVM
 }
 
 fn gas_cost(stack: &ContractCallStack, costid: CallStackCost) -> i64{
-    stack.gas_cost(SCCS_BUILT_IN_FEATURE, costid as u32)
+    stack.gas_cost(INTERNAL_BUILT_IN_FEATURE, costid as u32)
 }
 
 /// The primary call stack which is used for almost all communication purposes between the system call layer and VMs
