@@ -4,12 +4,12 @@ use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
 
 pub trait GasSchedule{
-    fn gas_cost(&mut self, feature: u32, function: u32, subset: u32) -> u64;
+    fn gas_cost(&self, feature: u32, costid: u32) -> i64;
 }
 
 pub struct BlankSchedule{}
 impl GasSchedule for BlankSchedule{
-    fn gas_cost(&mut self, _feature: u32, _function: u32, _subset: u32) -> u64{
+    fn gas_cost(&self, _feature: u32, _costid: u32) -> i64{
         0
     }
 }
@@ -24,7 +24,7 @@ pub struct ContractCallStack{
     pub pending_gas: i64,
     /// Note these fields are primary used for communication between the CallSystem, Hypervisor, and VM. 
     pub gas_remaining: u64,
-    pub gas_schedule: Box<dyn GasSchedule>
+    gas_schedule: Box<dyn GasSchedule>
 }
 
 impl Default for ContractCallStack{
@@ -48,6 +48,9 @@ impl ContractCallStack{
             gas_remaining: 0,
             gas_schedule: schedule
         }
+    }
+    pub fn gas_cost(&self, feature: u32, costid: u32) -> i64{
+        self.gas_schedule.gas_cost(feature, costid)
     }
     /// Adds to the current amount of gas consumed by the system call, and returns a recoverable error if there is not enough gas to satisfy it
     pub fn charge_gas(&mut self, amount: i64) -> Result<(), NeutronError>{

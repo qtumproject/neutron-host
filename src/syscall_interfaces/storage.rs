@@ -13,7 +13,7 @@ Functions:
 * key_exists(key) -> (bool)
 */
 
-const GLOBAL_STORAGE_FEATURE: u32 = 1;
+pub const GLOBAL_STORAGE_FEATURE: u32 = 1;
 
 #[derive(FromPrimitive)]
 pub enum GlobalStorageFunctions{
