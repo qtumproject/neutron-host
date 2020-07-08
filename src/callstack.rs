@@ -22,6 +22,18 @@ impl GasSchedule for BlankSchedule{
     }
 }
 
+pub const SCCS_BUILT_IN_FEATURE:u32 = 0;
+
+pub enum CallStackCost{
+    WriteByte = 1,
+    ReadByte,
+    ClearByteRefund
+}
+
+fn gas_cost(stack: &ContractCallStack, costid: CallStackCost) -> i64{
+    stack.gas_cost(SCCS_BUILT_IN_FEATURE, costid as u32)
+}
+
 /// The primary call stack which is used for almost all communication purposes between the system call layer and VMs
 /// It contains context information for the current smart contracts being executed and a shared general purpose stack
 /// All smart contract VMs should use this structure for all communication purposes with "the outside world"
@@ -32,7 +44,8 @@ pub struct ContractCallStack{
     pub pending_gas: i64,
     /// Note these fields are primary used for communication between the CallSystem, Hypervisor, and VM. 
     pub gas_remaining: u64,
-    gas_schedule: Box<dyn GasSchedule>
+    gas_schedule: Box<dyn GasSchedule>,
+    system_charges_enabled: bool
 }
 
 impl Default for ContractCallStack{
@@ -42,7 +55,8 @@ impl Default for ContractCallStack{
             context_stack: Vec::default(),
             pending_gas: 0,
             gas_remaining: 0,
-            gas_schedule: Box::from(BlankSchedule{})
+            gas_schedule: Box::from(BlankSchedule{}),
+            system_charges_enabled: true
         }
     }
 }
@@ -54,14 +68,25 @@ impl ContractCallStack{
             context_stack: Vec::default(),
             pending_gas: 0,
             gas_remaining: 0,
-            gas_schedule: schedule
+            gas_schedule: schedule,
+            system_charges_enabled: true
         }
+    }
+    pub fn disable_system_charges(&mut self){
+        self.system_charges_enabled = false;
+    }
+    pub fn enable_system_charges(&mut self){
+        self.system_charges_enabled = true;
     }
     pub fn x86_gas_charger(&self) -> GasCharger{
         self.gas_schedule.x86_gas_schedule()
     }
     pub fn gas_cost(&self, feature: u32, costid: u32) -> i64{
-        self.gas_schedule.gas_cost(feature, costid)
+        if self.system_charges_enabled {
+            self.gas_schedule.gas_cost(feature, costid)
+        }else{
+            0
+        }
     }
     /// Adds to the current amount of gas consumed by the system call, and returns a recoverable error if there is not enough gas to satisfy it
     pub fn charge_gas(&mut self, amount: i64) -> Result<(), NeutronError>{
@@ -76,6 +101,7 @@ impl ContractCallStack{
         if data.len() > 0xFFFF{
             return Err(Recoverable(RecoverableError::StackItemTooLarge));
         }
+        self.charge_gas(gas_cost(self, CallStackCost::WriteByte) * data.len() as i64)?;
         self.data_stack.push(data.to_vec());
         Ok(())
     }
@@ -86,6 +112,9 @@ impl ContractCallStack{
                 return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
             },
             Some(v) => {
+                let cost = gas_cost(self, CallStackCost::ReadByte) * v.len() as i64
+                         - gas_cost(self, CallStackCost::ClearByteRefund) * v.len() as i64;
+                self.charge_gas(cost)?;
                 return Ok(v);
             }
         }
@@ -95,11 +124,13 @@ impl ContractCallStack{
         if self.data_stack.len() == 0{
             return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
         }
-        self.data_stack.pop();
+        let data = self.data_stack.pop().unwrap();
+        let cost = gas_cost(self, CallStackCost::ClearByteRefund) * data.len() as i64;
+        self.charge_gas(cost)?;
         Ok(())
     }
 	/// Retrieves the top item on the Smart Contract Communication Stack without removing it
-	pub fn peek_sccs(&self, index: u32) -> Result<Vec<u8>, NeutronError>{
+	pub fn peek_sccs(&mut self, index: u32) -> Result<Vec<u8>, NeutronError>{
         let i = (self.data_stack.len() as isize - 1) - index as isize;
         if i < 0{
             return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
@@ -109,7 +140,10 @@ impl ContractCallStack{
                 return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
             },
             Some(v) => {
-                return Ok(v.to_vec());
+                let data = v.to_vec();
+                let cost = gas_cost(self, CallStackCost::ReadByte) * data.len() as i64;
+                self.charge_gas(cost)?;
+                return Ok(data);
             }
         }
     }
