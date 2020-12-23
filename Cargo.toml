@@ -1,7 +1,7 @@
 [package]
 name = "neutron-host"
 version = "0.1.0"
-authors = ["VoR0220 <catalanor0220@gmail.com>"]
+authors = ["earlz <earlz@qtum.info>", "VoR0220 <catalanor0220@gmail.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -13,17 +13,12 @@ members = [
 ]
 
 [dependencies]
-qx86 = { git = "https://github.com/qtumproject/qx86-rs", branch = "master"}
-struct_deser = "0.1.1"
-struct_deser-derive = "0.1.0"
+narm = { path = "../narm" }
 #neutron-star-constants = { git = "https://github.com/qtumproject/neutronstar-constants", branch = "master"}
 neutron-star-constants = { path = "../neutron-star-constants"}
-ring = "0.16.9"
-num = "0.2.0"
-num-derive = "0.3.0"
+ring = "0.16"
+num = "0.3"
+num-derive = "0.3"
 num-traits = "0.2"
-serde = "1.0.100"
-rmp-serde = "0.14.0"
-serde_derive = "1.0.100"
 elf = "0.0.10"
-rand = "0.7.3"
+rand = "0.8"

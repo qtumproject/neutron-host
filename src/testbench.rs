@@ -1,8 +1,6 @@
 extern crate neutron_star_constants;
 extern crate ring;
-extern crate struct_deser;
 extern crate elf;
-use crate::hypervisor::*;
 use crate::db::*;
 use std::path::PathBuf;
 use crate::syscall_interfaces::storage;
@@ -130,6 +128,7 @@ impl CallSystem for Testbench{
 impl Testbench{
     /// Begins execution using the top context within the stack
     pub fn execute_top_context(&mut self, stack: &mut ContractCallStack) -> Result<NeutronVMResult, NeutronError>{
+        /*
         self.db.checkpoint().unwrap();
         if stack.current_context().self_address.version == 2 {
             let mut vm = X86Interface::new(self, stack);
@@ -149,6 +148,8 @@ impl Testbench{
         }else{
             return Err(Unrecoverable(UnrecoverableError::UnknownVM));
         }
+        */
+        Err(NeutronError::Unrecoverable(UnrecoverableError::UnknownVM))
     }
     
     /// Deploy a smart contract from an ELF executable file

@@ -1,5 +1,3 @@
-extern crate struct_deser;
-use struct_deser_derive::*;
 use crate::addressing::*;
 use crate::callstack::*;
 use crate::neutronerror::*;
@@ -112,14 +110,12 @@ typedef struct{
     uint32_t qtumVersion;
 } NeutronVersion;
 */
-#[derive(StructDeser, Debug, Eq, PartialEq, Default)]
+#[derive(Debug, Eq, PartialEq, Default)]
 pub struct NeutronVersion{
     pub format: u8,
     pub root_vm: u8,
     pub vm_version: u8,
-    #[le]
     pub flags: u16,
-    #[le]
     pub qtum_version: u32
 }
 
