@@ -281,8 +281,8 @@ mod tests {
             assert_eq!(manager.peek_key(&key).unwrap()[0], 1);
             //call into sub contract
             {
-                manager.enter_element();
-                manager.exit_element();
+                manager.enter_element(); // as if the contract had called an element to make a call
+                manager.exit_element(); // element must be exited before execution can be transferred
                 manager.push_context(c2).unwrap();
                 manager.push_key(&key, &[3]).unwrap();
                 assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
@@ -300,8 +300,8 @@ mod tests {
                 assert_eq!(manager.peek_result_key(&key).unwrap()[0], 4);
                 assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
                 manager.pop_context().unwrap();
-                manager.enter_element();
-                manager.exit_element();
+                manager.enter_element(); // return to element context (ie to check results and push relevant data)
+                manager.exit_element(); // finally, exit element to return execution to contract
             }
             assert_eq!(manager.peek_result_key(&key).unwrap()[0], 3);
             assert_eq!(manager.peek_key(&key).unwrap()[0], 1);
