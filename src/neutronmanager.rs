@@ -277,22 +277,22 @@ mod tests {
         //call from transaction
         {
             manager.push_context(c1).unwrap();
-            assert_eq!(manager.peek_key(&key).unwrap()[0], 1);
             manager.push_key(&key, &[2]).unwrap();
+            assert_eq!(manager.peek_key(&key).unwrap()[0], 1);
             //call into sub contract
             {
                 manager.enter_element();
                 manager.exit_element();
                 manager.push_context(c2).unwrap();
-                assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
                 manager.push_key(&key, &[3]).unwrap();
+                assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
                 //call into sub sub contract
                 {
                     manager.enter_element();
                     manager.exit_element();
                     manager.push_context(c3).unwrap();
-                    assert_eq!(manager.peek_key(&key).unwrap()[0], 3);
                     manager.push_key(&key, &[4]).unwrap();
+                    assert_eq!(manager.peek_key(&key).unwrap()[0], 3);
                     manager.pop_context().unwrap();
                     manager.enter_element();
                     manager.exit_element();
