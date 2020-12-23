@@ -1,6 +1,7 @@
 use crate::addressing::*;
 use crate::callstack::*;
 use crate::neutronerror::*;
+use std::collections::HashMap;
 
 
 /// The result of a smart contract execution
@@ -50,6 +51,11 @@ pub struct ExecutionContext{
 	/// The current address of the executing smart contract
     pub self_address: NeutronAddress,
     pub execution_type: ExecutionType,
+    pub input_stack: usize,
+    pub output_stack: usize,
+    pub input_map: usize,
+    pub output_map: usize,
+    pub result_map: usize
 }
 
 impl ExecutionContext{
