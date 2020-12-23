@@ -95,7 +95,7 @@ enum SystemInterrupt{
 /// The VM interface for executing x86 smart contracts in Neutron
 pub struct X86Interface<'a>{
     pub call_system: &'a mut dyn CallSystem,
-    pub call_stack: &'a mut ContractCallStack,
+    pub call_stack: &'a mut NeutronManager,
     code_sections: Vec<Vec<u8>>,
     data_sections: Vec<Vec<u8>>
 }
@@ -125,7 +125,7 @@ impl<'a> X86Interface<'a> {
     const DATA_SECTION_SPACE: u8 = 2;
 
     /// Creates a new instance of the X86Interface
-    pub fn new<'b>(cs: &'b mut dyn CallSystem, stack: &'b mut ContractCallStack) -> X86Interface<'b>{
+    pub fn new<'b>(cs: &'b mut dyn CallSystem, stack: &'b mut NeutronManager) -> X86Interface<'b>{
         X86Interface{
             call_stack: stack,
             call_system: cs,
@@ -401,24 +401,24 @@ mod tests {
     use super::*;
     struct DummyCallSystem{}
     impl CallSystem for DummyCallSystem{
-        fn system_call(&mut self, _stack: &mut ContractCallStack, _feature: u32, _function: u32) -> Result<u32, NeutronError>{
+        fn system_call(&mut self, _stack: &mut NeutronManager, _feature: u32, _function: u32) -> Result<u32, NeutronError>{
             Err(Unrecoverable(UnrecoverableError::NotImplemented))
         }
         fn block_height(&self) -> Result<u32, NeutronError>{
             Err(Unrecoverable(UnrecoverableError::NotImplemented))
         }
-        fn read_state_key(&mut self, _stack: &mut ContractCallStack, _space: u8, _key: &[u8]) -> Result<Vec<u8>, NeutronError>{
+        fn read_state_key(&mut self, _stack: &mut NeutronManager, _space: u8, _key: &[u8]) -> Result<Vec<u8>, NeutronError>{
             Err(Unrecoverable(UnrecoverableError::NotImplemented))
         }
         /// Write a state key to the database using the permanent storage feature set
         /// Used for writing bytecode etc by VMs
-        fn write_state_key(&mut self, _stack: &mut ContractCallStack, _space: u8, _key: &[u8], _value: &[u8]) -> Result<(), NeutronError>{
+        fn write_state_key(&mut self, _stack: &mut NeutronManager, _space: u8, _key: &[u8], _value: &[u8]) -> Result<(), NeutronError>{
             Err(Unrecoverable(UnrecoverableError::NotImplemented))
         }
     }
     #[test]
     fn test_x86_sccs_push(){
-        let mut stack = ContractCallStack::default();
+        let mut stack = NeutronManager::default();
         let mut cs = DummyCallSystem{};
         {
             let mut hv = X86Interface::new(&mut cs, &mut stack);
@@ -443,7 +443,7 @@ mod tests {
     }
     #[test]
     fn test_x86_sccs_pop(){
-        let mut stack = ContractCallStack::default();
+        let mut stack = NeutronManager::default();
         let mut cs = DummyCallSystem{};
         let item = vec![9, 1, 2, 3, 4];
         stack.push_sccs(&item).unwrap();
@@ -479,7 +479,7 @@ mod tests {
     }
     #[test]
     fn test_x86_sccs_drop(){
-        let mut stack = ContractCallStack::default();
+        let mut stack = NeutronManager::default();
         let mut cs = DummyCallSystem{};
         let item = vec![9, 1, 2, 3, 4];
         stack.push_sccs(&item).unwrap();
@@ -496,7 +496,7 @@ mod tests {
     }
     #[test]
     fn test_x86_sccs_peek(){
-        let mut stack = ContractCallStack::default();
+        let mut stack = NeutronManager::default();
         let mut cs = DummyCallSystem{};
         let item = vec![9, 1, 2, 3, 4];
         stack.push_sccs(&item).unwrap();

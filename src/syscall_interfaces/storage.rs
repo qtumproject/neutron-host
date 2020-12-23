@@ -1,4 +1,4 @@
-use crate::callstack::*;
+use crate::neutronmanager::*;
 use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
 /*
@@ -24,7 +24,7 @@ pub enum GlobalStorageFunctions{
 }
 
 pub trait GlobalStorage{
-    fn try_syscall(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<bool, NeutronError>{
+    fn try_syscall(&mut self, stack: &mut NeutronManager, feature: u32, function: u32) -> Result<bool, NeutronError>{
         if feature != GLOBAL_STORAGE_FEATURE{
             return Ok(false);
         }
@@ -53,8 +53,8 @@ pub trait GlobalStorage{
             Ok(true)
         }
     }
-    fn store_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>;
-    fn load_state(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>;
-    fn key_exists(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>;
+    fn store_state(&mut self, stack: &mut NeutronManager) -> Result<(), NeutronError>;
+    fn load_state(&mut self, stack: &mut NeutronManager) -> Result<(), NeutronError>;
+    fn key_exists(&mut self, stack: &mut NeutronManager) -> Result<(), NeutronError>;
 }
 

@@ -43,7 +43,7 @@ impl NeutronManager{
         }
     }
 	pub fn peek_stack(&self, index: u32) -> Result<Vec<u8>, NeutronError>{
-        let stack = &mut self.stacks[self.input_stack];
+        let stack = &self.stacks[self.input_stack];
         let i = (stack.len() as isize - 1) - index as isize;
         if i < 0{
             return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
@@ -78,7 +78,7 @@ impl NeutronManager{
 
     /// Pushes a new execution context into the stack
     pub fn push_context(&mut self, context: ExecutionContext) -> Result<(), NeutronError>{
-        let c = context;
+        let mut c = context;
         self.top_input_map = self.top_output_map; //one below top of stack
         self.top_output_map = self.top_result_map; //top of stack
         self.top_result_map = self.top_result_map + 1; //new (temporary) map
@@ -86,9 +86,9 @@ impl NeutronManager{
         c.input_map = self.top_input_map;
         c.output_map = self.top_output_map;
         c.result_map = self.top_result_map;
-        self.maps.get(self.top_output_map).unwrap().clear(); //clear what is now the new result map (which can go on to become the next call's output map)
+        self.maps.get_mut(self.top_output_map).unwrap().clear(); //clear what is now the new result map (which can go on to become the next call's output map)
         self.maps.push(HashMap::<Vec<u8>, Vec<u8>>::new()); //push new result map
-        self.context_stack.push(context);
+        self.context_stack.push(c);
         //begin execution???
         Ok(())
     }
@@ -116,7 +116,7 @@ impl NeutronManager{
             },
             Some(v) => {}
         }
-        let &c = match self.context_stack.last(){
+        let c = match self.context_stack.last(){
             None => {
                 return Ok(());
             },

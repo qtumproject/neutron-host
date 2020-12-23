@@ -1,5 +1,5 @@
 use crate::addressing::*;
-use crate::callstack::*;
+use crate::neutronmanager::*;
 use crate::neutronerror::*;
 use std::collections::HashMap;
 
@@ -135,16 +135,16 @@ pub trait VMInterface{
 
 pub trait CallSystem{
     /// General system call interface
-    fn system_call(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<u32, NeutronError>;
+    fn system_call(&mut self, stack: &mut NeutronManager, feature: u32, function: u32) -> Result<u32, NeutronError>;
     /// Get the current block height at execution
     /// Used to switch VM behavior in blockchain forks
     fn block_height(&self) -> Result<u32, NeutronError>;
     /// Read a state key from the database using the permanent storage feature set
     /// Used for reading core contract bytecode by VMs
-    fn read_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>;
+    fn read_state_key(&mut self, stack: &mut NeutronManager, space: u8, key: &[u8]) -> Result<Vec<u8>, NeutronError>;
     /// Write a state key to the database using the permanent storage feature set
     /// Used for writing bytecode etc by VMs
-    fn write_state_key(&mut self, stack: &mut ContractCallStack, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>;
+    fn write_state_key(&mut self, stack: &mut NeutronManager, space: u8, key: &[u8], value: &[u8]) -> Result<(), NeutronError>;
 
     fn log_error(&self, msg: &str){
         println!("Error: {}", msg);

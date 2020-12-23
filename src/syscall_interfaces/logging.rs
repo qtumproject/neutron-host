@@ -1,4 +1,4 @@
-use crate::callstack::*;
+use crate::neutronmanager::*;
 use crate::neutronerror::*;
 use crate::neutronerror::NeutronError::*;
 /*
@@ -34,7 +34,7 @@ pub enum LoggingFunctions{
 }
 
 pub trait LoggingInterface{
-    fn try_syscall(&mut self, stack: &mut ContractCallStack, feature: u32, function: u32) -> Result<bool, NeutronError>{
+    fn try_syscall(&mut self, stack: &mut NeutronManager, feature: u32, function: u32) -> Result<bool, NeutronError>{
         if feature != LOGGING_FEATURE {
             return Ok(false);
         }
@@ -66,9 +66,9 @@ pub trait LoggingInterface{
             Ok(true)
         }
     }
-    fn log_debug(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>;
-    fn log_info(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>;
-    fn log_warning(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>;
-    fn log_error(&mut self, stack: &mut ContractCallStack) -> Result<(), NeutronError>;
+    fn log_debug(&mut self, stack: &mut NeutronManager) -> Result<(), NeutronError>;
+    fn log_info(&mut self, stack: &mut NeutronManager) -> Result<(), NeutronError>;
+    fn log_warning(&mut self, stack: &mut NeutronManager) -> Result<(), NeutronError>;
+    fn log_error(&mut self, stack: &mut NeutronManager) -> Result<(), NeutronError>;
 }
 

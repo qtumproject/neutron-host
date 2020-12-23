@@ -4,7 +4,7 @@ This repository holds the various pieces of infrastructure for running and execu
 
 Currently most functionality here is for running integration tests on Neutron smart contracts. The primary 2 structures to be concerned with is the following:
 
-## ContractCallStack
+## NeutronManager
 
 This class holds the "context" of execution, as well as the "smart contract communication stack" or 'SCCS'. The context holds information about the current execution (as well as sub-call executions) such as how many coins were sent with the execution, the gas limit, address of the contract being executed, type of execution, etc. The SCCS is a general purpose data stack that is shared between different smart contract executions and the hypervisor interface. It is ideal for ABI data such as specifying what function to call within a smart contract and what arguments to pass to those functions. Internally system calls, such as storing state or creating transactions, also use the SCCS for transferring data to/from the smart contract code to/from the "CallSystem" interface. Later an official NeutronABI system will be implemented so that the SCCS is a purely internal detail that most people never need to actually interact with. 
 
@@ -39,13 +39,13 @@ mod tests {
         let mut testbench = Testbench::default();
         
         //test deploying contract from a compiled ELF file (ie, what the Rust compiler outputs)
-        let mut stack = ContractCallStack::default();
+        let mut stack = NeutronManager::default();
         stack.create_top_level_deploy(address.clone(), NeutronAddress::new_random_address(), 10000000, 0); //create a "context" indicating that this is a smart contract deployment
         let result = testbench.deploy_from_elf(&mut stack, "../my_smart_contract/i486-neutron/debug/my_smart_contract".to_string()).unwrap();
         assert!(result.error_code == 0); //ensure no error returned from our smart contract code
 
         //test that calling deployed contract works (with no arguments nor function selector ABI passed)
-        let mut stack = ContractCallStack::default();
+        let mut stack = NeutronManager::default();
         stack.create_top_level_call(address.clone(), NeutronAddress::new_random_address(), 100000, 0); //create a "context" indicating that this is a smart contract call
         let result = testbench.execute_top_context(&mut stack).unwrap();
         assert!(result.error_code == 0); //ensure no error returned from our smart contract code
