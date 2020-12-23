@@ -18,6 +18,16 @@ pub struct NeutronManager{
 }
 
 impl NeutronManager{
+    pub fn new() -> NeutronManager{
+        let mut manager = NeutronManager::default();
+        manager.maps.push(HashMap::<Vec<u8>, Vec<u8>>::default()); //add output map (note: this is flipped when context is pushed)
+        manager.maps.push(HashMap::<Vec<u8>, Vec<u8>>::default()); //add input map
+        manager.top_input_map = 1;
+        manager.top_output_map = 0;
+        manager.top_result_map = 1;
+        manager
+    }
+
     pub fn push_stack(&mut self, data: &[u8]) -> Result<(), NeutronError>{
         self.stacks[self.output_stack].push(data.to_vec());
         Ok(())
@@ -25,7 +35,7 @@ impl NeutronManager{
 	pub fn pop_stack(&mut self) -> Result<Vec<u8>, NeutronError>{
         match self.stacks[self.input_stack].pop(){
             None => {
-                return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
+                return Err(Recoverable(RecoverableError::ItemDoesntExist));
             },
             Some(v) => {
                 return Ok(v);
@@ -35,7 +45,7 @@ impl NeutronManager{
 	pub fn drop_stack(&mut self) -> Result<(), NeutronError>{
         match self.stacks[self.input_stack].pop(){
             None => {
-                return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
+                return Err(Recoverable(RecoverableError::ItemDoesntExist));
             },
             Some(v) => {
                 return Ok(());
@@ -46,17 +56,55 @@ impl NeutronManager{
         let stack = &self.stacks[self.input_stack];
         let i = (stack.len() as isize - 1) - index as isize;
         if i < 0{
-            return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
+            return Err(Recoverable(RecoverableError::ItemDoesntExist));
         }
         match stack.get(i as usize){
             None => {
-                return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
+                return Err(Recoverable(RecoverableError::ItemDoesntExist));
             },
             Some(v) => {
                 return Ok(v.to_vec());
             }
         }
     }
+
+    pub fn push_key(&mut self, key: &[u8], value: &[u8]) -> Result<(), NeutronError>{
+        self.maps.get_mut(self.top_output_map).unwrap().insert(key.to_vec(), value.to_vec());
+        Ok(())
+    }
+    /* should this be allowed?
+    pub fn pop_key(&mut self, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
+        match self.maps[self.top_input_map].remove(key){
+            Some(v) => {
+                Ok(v)
+            },
+            None => {
+                Err(Recoverable(RecoverableError::ItemDoesntExist))
+            }
+        }
+    }
+    */
+    pub fn peek_key(&self, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
+        match self.maps[self.top_input_map].get(key){
+            Some(v) => {
+                Ok(v.to_vec())
+            },
+            None => {
+                Err(Recoverable(RecoverableError::ItemDoesntExist))
+            }
+        }
+    }
+    pub fn peek_result_key(&self, key: &[u8]) -> Result<Vec<u8>, NeutronError>{
+        match self.maps[self.top_result_map].get(key){
+            Some(v) => {
+                Ok(v.to_vec())
+            },
+            None => {
+                Err(Recoverable(RecoverableError::ItemDoesntExist))
+            }
+        }
+    }
+
     /// Should only be used by Element APIs. Flip stacks once when entering an Element API and once more when leaving and returning to a contract.
     /// Used so that contract outputs become Element inputs at first, then so that Element outputs becomes contract inputs
     fn flip_stacks(&mut self){
@@ -118,6 +166,10 @@ impl NeutronManager{
         }
         let c = match self.context_stack.last(){
             None => {
+                //no more contexts, so set to transaction level behavior
+                self.top_input_map = 1;
+                self.top_output_map = 0;
+                self.top_result_map = 1;
                 return Ok(());
             },
             Some(v) => {v}
@@ -132,11 +184,11 @@ impl NeutronManager{
     pub fn peek_context(&self, index: usize) -> Result<&ExecutionContext, NeutronError>{
         let i = (self.context_stack.len() as isize - 1) - index as isize;
         if i < 0{
-            return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
+            return Err(Recoverable(RecoverableError::ItemDoesntExist));
         }
         match self.context_stack.get(i as usize){
             None => {
-                return Err(Recoverable(RecoverableError::StackIndexDoesntExist));
+                return Err(Recoverable(RecoverableError::ItemDoesntExist));
             },
             Some(v) => {
                 return Ok(v);
@@ -203,7 +255,49 @@ impl NeutronManager{
         c.execution_type = ExecutionType::Deploy;
         self.push_context(c).unwrap();
     }
+}
 
 
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_call_map_flow(){
+        let mut manager = NeutronManager::new();
+        let c1 = ExecutionContext::default();
+        let c2 = ExecutionContext::default();
+        let c3 = ExecutionContext::default();
+        let key = [0];
+        //ABI data
+        manager.push_key(&key, &[1]).unwrap();
+        //call from transaction
+        {
+            manager.push_context(c1).unwrap();
+            assert!(manager.peek_key(&key).unwrap()[0] == 1);
+            manager.push_key(&key, &[2]).unwrap();
+            //call into sub contract
+            {
+                manager.push_context(c2).unwrap();
+                assert!(manager.peek_key(&key).unwrap()[0] == 2);
+                manager.push_key(&key, &[3]).unwrap();
+                //call into sub sub contract
+                {
+                    manager.push_context(c3).unwrap();
+                    assert!(manager.peek_key(&key).unwrap()[0] == 3);
+                    manager.push_key(&key, &[4]).unwrap();
+                    manager.pop_context().unwrap();
+                }
+                assert!(manager.peek_result_key(&key).unwrap()[0] == 4);
+                assert!(manager.peek_key(&key).unwrap()[0] == 2);
+                manager.pop_context().unwrap();
+            }
+            assert!(manager.peek_result_key(&key).unwrap()[0] == 3);
+            assert!(manager.peek_key(&key).unwrap()[0] == 1);
+            manager.pop_context().unwrap();
+        }
+        
+        assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
+        assert_eq!(manager.peek_result_key(&key).unwrap()[0], 2);
+    }
 }

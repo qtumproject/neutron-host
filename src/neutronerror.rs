@@ -18,7 +18,7 @@ pub enum UnrecoverableError{
 //TODO: this later needs to be moved/copied to neutron-constants for sharing with neutron-star
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RecoverableError{
-    StackIndexDoesntExist = 0x8000_0001,
+    ItemDoesntExist = 0x8000_0001,
     StackItemTooLarge,
     InvalidSystemFunction,
     InvalidSystemFeature,
