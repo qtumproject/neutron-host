@@ -274,26 +274,26 @@ mod tests {
         //call from transaction
         {
             manager.push_context(c1).unwrap();
-            assert!(manager.peek_key(&key).unwrap()[0] == 1);
+            assert_eq!(manager.peek_key(&key).unwrap()[0], 1);
             manager.push_key(&key, &[2]).unwrap();
             //call into sub contract
             {
                 manager.push_context(c2).unwrap();
-                assert!(manager.peek_key(&key).unwrap()[0] == 2);
+                assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
                 manager.push_key(&key, &[3]).unwrap();
                 //call into sub sub contract
                 {
                     manager.push_context(c3).unwrap();
-                    assert!(manager.peek_key(&key).unwrap()[0] == 3);
+                    assert_eq!(manager.peek_key(&key).unwrap()[0], 3);
                     manager.push_key(&key, &[4]).unwrap();
                     manager.pop_context().unwrap();
                 }
-                assert!(manager.peek_result_key(&key).unwrap()[0] == 4);
-                assert!(manager.peek_key(&key).unwrap()[0] == 2);
+                assert_eq!(manager.peek_result_key(&key).unwrap()[0], 4);
+                assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
                 manager.pop_context().unwrap();
             }
-            assert!(manager.peek_result_key(&key).unwrap()[0] == 3);
-            assert!(manager.peek_key(&key).unwrap()[0] == 1);
+            assert_eq!(manager.peek_result_key(&key).unwrap()[0], 3);
+            assert_eq!(manager.peek_key(&key).unwrap()[0], 1);
             manager.pop_context().unwrap();
         }
         
