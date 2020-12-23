@@ -25,6 +25,9 @@ impl NeutronManager{
         manager.top_input_map = 1;
         manager.top_output_map = 0;
         manager.top_result_map = 1;
+        manager.input_stack = 0;
+        manager.output_stack = 1;
+        //manager.stacks.push(Vec::<Vec<u8>>::default());
         manager
     }
 
@@ -278,19 +281,27 @@ mod tests {
             manager.push_key(&key, &[2]).unwrap();
             //call into sub contract
             {
+                manager.enter_element();
+                manager.exit_element();
                 manager.push_context(c2).unwrap();
                 assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
                 manager.push_key(&key, &[3]).unwrap();
                 //call into sub sub contract
                 {
+                    manager.enter_element();
+                    manager.exit_element();
                     manager.push_context(c3).unwrap();
                     assert_eq!(manager.peek_key(&key).unwrap()[0], 3);
                     manager.push_key(&key, &[4]).unwrap();
                     manager.pop_context().unwrap();
+                    manager.enter_element();
+                    manager.exit_element();
                 }
                 assert_eq!(manager.peek_result_key(&key).unwrap()[0], 4);
                 assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
                 manager.pop_context().unwrap();
+                manager.enter_element();
+                manager.exit_element();
             }
             assert_eq!(manager.peek_result_key(&key).unwrap()[0], 3);
             assert_eq!(manager.peek_key(&key).unwrap()[0], 1);
@@ -299,5 +310,28 @@ mod tests {
         
         assert_eq!(manager.peek_key(&key).unwrap()[0], 2);
         assert_eq!(manager.peek_result_key(&key).unwrap()[0], 2);
+    }
+    #[test]
+    fn test_element_stack_flow(){
+        let mut manager = NeutronManager::new();
+        let c1 = ExecutionContext::default();        
+        let key = [0];
+        //ABI data
+        manager.push_key(&key, &[1]).unwrap();
+        //element data
+        manager.push_context(c1).unwrap();
+        manager.push_stack(&[2]).unwrap();
+        manager.push_key(&key, &[5]).unwrap();
+        {
+            manager.enter_element();
+            manager.push_stack(&[3]).unwrap();
+            manager.push_key(&key, &[4]).unwrap();
+            assert_eq!(manager.peek_key(&key).unwrap()[0], 5);
+            assert_eq!(manager.pop_stack().unwrap()[0], 2);
+            manager.exit_element();
+        }
+        assert_eq!(manager.peek_result_key(&key).unwrap()[0], 4);
+        assert_eq!(manager.pop_stack().unwrap()[0], 3);
+        manager.pop_context().unwrap();
     }
 }
